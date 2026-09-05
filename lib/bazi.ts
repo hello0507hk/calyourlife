@@ -1,5 +1,6 @@
 // @ts-ignore
-import { Solar } from 'lunar-javascript';
+const lunar = require('lunar-javascript');
+const { Solar, Lunar } = lunar;
 
 export interface BaziResult {
   solarDate: string;      // 陽曆日期
