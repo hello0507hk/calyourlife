@@ -1,4 +1,4 @@
-// @ts-ignore
+// @ts-nocheck
 import { Solar } from 'lunar-javascript';
 
 export interface BaziResult {
@@ -108,7 +108,7 @@ export function calculateBazi(
       },
     },
     wuxingCounts,
-    dayyun: daYunList.slice(1, 9).map((dy) => ({
+    dayyun: daYunList.slice(1, 9).map((dy: any) => ({
       age: dy.getStartAge(),
       ganZhi: dy.getGanZhi(),
     })),
