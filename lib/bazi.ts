@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-ignore
 import { Solar } from 'lunar-javascript';
 
 export interface BaziResult {
