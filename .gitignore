@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# editor swap / local caches
+app/.page.tsx.swp
+.next/
+node_modules/
