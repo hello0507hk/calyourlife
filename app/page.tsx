@@ -77,27 +77,21 @@ const ZHI_ELEMENT: Record<string, Element> = {
 
 type PillarKey = 'year' | 'month' | 'day' | 'hour';
 
+// 1. 更新 Pillar 介面
 interface Pillar {
   key: PillarKey;
   label: string;
   sublabel: string;
   heavenlyStem: string;
   heavenlyElement: Element;
+  heavenlyTenGod: string; // 天干十神
   earthlyBranch: string;
   earthlyElement: Element;
+  earthlyTenGod: string;  // 地支本氣十神
   hiddenStems: { char: string; element: Element; god: string }[];
-  tenGod: string;
 }
 
-interface LuckPeriod {
-  age: string;
-  year: string;
-  stem: string;
-  branch: string;
-  element: Element;
-  current?: boolean;
-}
-
+// 2. 更新 mapBaziToPillars 轉換函式
 function mapBaziToPillars(bazi: BaziResult): Pillar[] {
   const keys: PillarKey[] = ['year', 'month', 'day', 'hour'];
   const labels = ['年柱', '月柱', '日柱', '時柱'];
@@ -120,9 +114,10 @@ function mapBaziToPillars(bazi: BaziResult): Pillar[] {
       sublabel: sublabels[i],
       heavenlyStem: hGan,
       heavenlyElement: GAN_ELEMENT[hGan] || 'wood',
+      heavenlyTenGod: pData.ganShishen,
       earthlyBranch: eZhi,
       earthlyElement: ZHI_ELEMENT[eZhi] || 'wood',
-      tenGod: pData.ganShishen,
+      earthlyTenGod: pData.zhiShishen || hiddenStems[0]?.god || '',
       hiddenStems,
     };
   });
@@ -380,7 +375,7 @@ function FourPillars({ pillars }: { pillars: Pillar[] }) {
     <section>
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="font-serif text-xl font-medium text-slate-100">四柱八字</h2>
-        <span className="text-xs text-slate-400">天干 · 地支 · 五行</span>
+        <span className="text-xs text-slate-400">天干 · 地支 · 十神</span>
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -395,19 +390,32 @@ function FourPillars({ pillars }: { pillars: Pillar[] }) {
             >
               <header className="mb-2.5 flex items-center justify-between">
                 <h3 className="font-serif text-sm font-medium text-slate-200">{p.label}</h3>
-                {isDay && <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 text-[9px] font-medium text-amber-300">日主</span>}
+                {isDay && (
+                  <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 text-[9px] font-medium text-amber-300">
+                    日主
+                  </span>
+                )}
               </header>
 
               <div className="mb-2.5 flex flex-col gap-1.5">
-                <GlyphBlock char={p.heavenlyStem} element={p.heavenlyElement} caption="天干 · " />
-                <GlyphBlock char={p.earthlyBranch} element={p.earthlyElement} caption="地支 · " />
+                {/* 天干方塊 + 天干十神 */}
+                <div className="relative">
+                  <GlyphBlock char={p.heavenlyStem} element={p.heavenlyElement} caption="天干 · " />
+                  <span className="absolute top-1.5 right-1.5 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-medium text-amber-400 border border-amber-500/30">
+                    {p.heavenlyTenGod}
+                  </span>
+                </div>
+
+                {/* 地支方塊 + 地支本氣十神 */}
+                <div className="relative">
+                  <GlyphBlock char={p.earthlyBranch} element={p.earthlyElement} caption="地支 · " />
+                  <span className="absolute top-1.5 right-1.5 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-medium text-slate-300 border border-slate-700/50">
+                    {p.earthlyTenGod}
+                  </span>
+                </div>
               </div>
 
               <dl className="flex flex-col gap-1 border-t border-slate-800/80 pt-2 text-[11px]">
-                <div className="flex items-center justify-between">
-                  <dt className="text-slate-400">主星</dt>
-                  <dd className="font-medium text-slate-200">{p.tenGod}</dd>
-                </div>
                 <div className="flex items-center justify-between">
                   <dt className="text-slate-400">宮位</dt>
                   <dd className="text-slate-300">{p.sublabel}</dd>
