@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { calculateBazi, BaziResult } from '@/lib/bazi';
+import { calculateBazi } from '@/lib/bazi';
 import {
   ChevronDown,
   Compass,
@@ -19,6 +19,21 @@ import {
   Calendar as CalendarIcon,
 } from 'lucide-react';
 
+// 補足因 bazi.js 轉為純 JS 後缺少的型別定義
+export interface BaziResult {
+  solarDate: string;
+  lunarDate: string;
+  dayGan: string;
+  dayGanWuxing: string;
+  eightChar: {
+    year: { gan: string; zhi: string; ganShishen: string; zangGan: string[]; zangGanShishen: string[] };
+    month: { gan: string; zhi: string; ganShishen: string; zangGan: string[]; zangGanShishen: string[] };
+    day: { gan: string; zhi: string; ganShishen: string; zangGan: string[]; zangGanShishen: string[] };
+    hour: { gan: string; zhi: string; ganShishen: string; zangGan: string[]; zangGanShishen: string[] };
+  };
+  wuxingCounts: { 木: number; 火: number; 土: number; 金: number; 水: number };
+  dayyun: Array<{ age: number; ganZhi: string }>;
+}
 /* ------------------------------------------------------------------ */
 /* 五行深色主題樣式設定                                                 */
 /* ------------------------------------------------------------------ */

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "八字排盤與 AI 命理網站",
-  description: "精準四柱八字排盤、五行藏干大運與 AI 深度解盤",
+  title: '八字排盤與 AI 命理分析 | CalYourLife',
+  description: '提供精確八字四柱排盤、藏干十神計算、五行喜用分析與 AI 命理解答。',
 };
 
 export default function RootLayout({
