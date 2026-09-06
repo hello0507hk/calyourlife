@@ -6,6 +6,30 @@ export const maxDuration = 60;
 function buildBaziText(baziData: any) {
   const { eightChar, dayGan, dayGanWuxing, wuxingCounts, dayyun, solarDate, lunarDate } = baziData;
 
+  // 1. 自動彙整四柱天干與藏干的所有十神
+  const allTenGods: string[] = [
+    eightChar.year.ganShishen,
+    ...eightChar.year.zangGanShishen,
+    eightChar.month.ganShishen,
+    ...eightChar.month.zangGanShishen,
+    '日主',
+    ...eightChar.day.zangGanShishen,
+    eightChar.hour.ganShishen,
+    ...eightChar.hour.zangGanShishen,
+  ].filter(Boolean);
+
+  // 2. 統計各十神出現次數
+  const godCounts: Record<string, number> = {};
+  allTenGods.forEach((god) => {
+    if (god !== '日主') {
+      godCounts[god] = (godCounts[god] || 0) + 1;
+    }
+  });
+
+  const godSummary = Object.entries(godCounts)
+    .map(([god, count]) => `${god}:${count}個`)
+    .join('、');
+    
   return `
 【陽曆日期】：${solarDate}
 【農曆日期】：${lunarDate}
