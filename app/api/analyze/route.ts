@@ -30,7 +30,7 @@ function buildBaziText(baziData: any) {
     .map(([god, count]) => `${god}:${count}個`)
     .join('、');
 
-// 自動計算天干五合
+// 3. 自動計算天干五合
 function checkGanHe(gans: string[]) {
     const combinations = [
       { pair: ['甲', '己'], name: '甲己合化土' },
@@ -68,7 +68,7 @@ function checkGanHe(gans: string[]) {
       eightChar.hour.gan,
     ];
   
-    const ganHeResult = checkGanHe(fourGans);    
+  const ganHeResult = checkGanHe(fourGans);    
 
   return `
 【陽曆日期】：${solarDate}
