@@ -30,6 +30,46 @@ function buildBaziText(baziData: any) {
     .map(([god, count]) => `${god}:${count}個`)
     .join('、');
 
+// 自動計算天干五合
+function checkGanHe(gans: string[]) {
+    const combinations = [
+      { pair: ['甲', '己'], name: '甲己合化土' },
+      { pair: ['乙', '庚'], name: '乙庚合化金' },
+      { pair: ['丙', '辛'], name: '丙辛合化水' },
+      { pair: ['丁', '壬'], name: '丁壬合化木' },
+      { pair: ['戊', '癸'], name: '戊癸合化火' },
+    ];
+  
+    const found: string[] = [];
+    for (let i = 0; i < gans.length; i++) {
+      for (let j = i + 1; j < gans.length; j++) {
+        const g1 = gans[i];
+        const g2 = gans[j];
+        for (const c of combinations) {
+          if ((g1 === c.pair[0] && g2 === c.pair[1]) || (g1 === c.pair[1] && g2 === c.pair[0])) {
+            found.push(`${g1}${g2}合（${c.name}）`);
+          }
+        }
+      }
+    }
+  
+    // 去重並回傳
+    const uniqueFound = Array.from(new Set(found));
+    return uniqueFound.length > 0 ? uniqueFound.join('、') : '原局天干無五合組合';
+  }
+  
+  function buildBaziText(baziData: any) {
+    const { eightChar, dayGan, dayGanWuxing, wuxingCounts, dayyun, solarDate, lunarDate } = baziData;
+  
+    const fourGans = [
+      eightChar.year.gan,
+      eightChar.month.gan,
+      eightChar.day.gan,
+      eightChar.hour.gan,
+    ];
+  
+    const ganHeResult = checkGanHe(fourGans);    
+
   return `
 【陽曆日期】：${solarDate}
 【農曆日期】：${lunarDate}
