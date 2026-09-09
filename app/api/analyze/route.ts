@@ -3,22 +3,50 @@ import { NextResponse } from 'next/server';
 // 延長 Vercel 超時限制至 60 秒
 export const maxDuration = 60;
 
+// 1. 自動計算天干五合（獨立函式）
+function checkGanHe(gans: string[]) {
+  const combinations = [
+    { pair: ['甲', '己'], name: '甲己合化土' },
+    { pair: ['乙', '庚'], name: '乙庚合化金' },
+    { pair: ['丙', '辛'], name: '丙辛合化水' },
+    { pair: ['丁', '壬'], name: '丁壬合化木' },
+    { pair: ['戊', '癸'], name: '戊癸合化火' },
+  ];
+
+  const found: string[] = [];
+  for (let i = 0; i < gans.length; i++) {
+    for (let j = i + 1; j < gans.length; j++) {
+      const g1 = gans[i];
+      const g2 = gans[j];
+      for (const c of combinations) {
+        if ((g1 === c.pair[0] && g2 === c.pair[1]) || (g1 === c.pair[1] && g2 === c.pair[0])) {
+          found.push(`${g1}${g2}合（${c.name}）`);
+        }
+      }
+    }
+  }
+
+  const uniqueFound = Array.from(new Set(found));
+  return uniqueFound.length > 0 ? uniqueFound.join('、') : '原局天干無五合組合';
+}
+
+// 2. 構建傳給 DeepSeek 的八字 Prompt 文字（獨立函式）
 function buildBaziText(baziData: any) {
   const { eightChar, dayGan, dayGanWuxing, wuxingCounts, dayyun, solarDate, lunarDate } = baziData;
 
-  // 1. 自動彙整四柱天干與藏干的所有十神
+  // 自動彙整四柱天干與藏干的所有十神
   const allTenGods: string[] = [
     eightChar.year.ganShishen,
-    ...eightChar.year.zangGanShishen,
+    ...(eightChar.year.zangGanShishen || []),
     eightChar.month.ganShishen,
-    ...eightChar.month.zangGanShishen,
+    ...(eightChar.month.zangGanShishen || []),
     '日主',
-    ...eightChar.day.zangGanShishen,
+    ...(eightChar.day.zangGanShishen || []),
     eightChar.hour.ganShishen,
-    ...eightChar.hour.zangGanShishen,
+    ...(eightChar.hour.zangGanShishen || []),
   ].filter(Boolean);
 
-  // 2. 統計各十神出現次數
+  // 統計各十神出現次數
   const godCounts: Record<string, number> = {};
   allTenGods.forEach((god) => {
     if (god !== '日主') {
@@ -30,45 +58,14 @@ function buildBaziText(baziData: any) {
     .map(([god, count]) => `${god}:${count}個`)
     .join('、');
 
-// 3. 自動計算天干五合
-function checkGanHe(gans: string[]) {
-    const combinations = [
-      { pair: ['甲', '己'], name: '甲己合化土' },
-      { pair: ['乙', '庚'], name: '乙庚合化金' },
-      { pair: ['丙', '辛'], name: '丙辛合化水' },
-      { pair: ['丁', '壬'], name: '丁壬合化木' },
-      { pair: ['戊', '癸'], name: '戊癸合化火' },
-    ];
-  
-    const found: string[] = [];
-    for (let i = 0; i < gans.length; i++) {
-      for (let j = i + 1; j < gans.length; j++) {
-        const g1 = gans[i];
-        const g2 = gans[j];
-        for (const c of combinations) {
-          if ((g1 === c.pair[0] && g2 === c.pair[1]) || (g1 === c.pair[1] && g2 === c.pair[0])) {
-            found.push(`${g1}${g2}合（${c.name}）`);
-          }
-        }
-      }
-    }
-  
-    // 去重並回傳
-    const uniqueFound = Array.from(new Set(found));
-    return uniqueFound.length > 0 ? uniqueFound.join('、') : '原局天干無五合組合';
-  }
-  
-  function buildBaziText(baziData: any) {
-    const { eightChar, dayGan, dayGanWuxing, wuxingCounts, dayyun, solarDate, lunarDate } = baziData;
-  
-    const fourGans = [
-      eightChar.year.gan,
-      eightChar.month.gan,
-      eightChar.day.gan,
-      eightChar.hour.gan,
-    ];
-  
-  const ganHeResult = checkGanHe(fourGans);    
+  // 計算天干五合
+  const fourGans = [
+    eightChar.year.gan,
+    eightChar.month.gan,
+    eightChar.day.gan,
+    eightChar.hour.gan,
+  ];
+  const ganHeResult = checkGanHe(fourGans);
 
   return `
 【陽曆日期】：${solarDate}
@@ -76,10 +73,14 @@ function checkGanHe(gans: string[]) {
 【日主（日干）】：${dayGan}（五行屬${dayGanWuxing}）
 
 【四柱八字與十神藏干】：
-- 年柱：${eightChar.year.gan}${eightChar.year.zhi}（天干十神：${eightChar.year.ganShishen}，藏干：${eightChar.year.zangGan.join('/')}）
-- 月柱：${eightChar.month.gan}${eightChar.month.zhi}（天干十神：${eightChar.month.ganShishen}，藏干：${eightChar.month.zangGan.join('/')}）
-- 日柱：${eightChar.day.gan}${eightChar.day.zhi}（日主，藏干：${eightChar.day.zangGan.join('/')}）
-- 時柱：${eightChar.hour.gan}${eightChar.hour.zhi}（天干十神：${eightChar.hour.ganShishen}，藏干：${eightChar.hour.zangGan.join('/')}）
+- 年柱：${eightChar.year.gan}${eightChar.year.zhi}（天干十神：${eightChar.year.ganShishen}，藏干：${eightChar.year.zangGan.join('/')}，藏干十神：${(eightChar.year.zangGanShishen || []).join('/')}）
+- 月柱：${eightChar.month.gan}${eightChar.month.zhi}（天干十神：${eightChar.month.ganShishen}，藏干：${eightChar.month.zangGan.join('/')}，藏干十神：${(eightChar.month.zangGanShishen || []).join('/')}）
+- 日柱：${eightChar.day.gan}${eightChar.day.zhi}（日主，藏干：${eightChar.day.zangGan.join('/')}，藏干十神：${(eightChar.day.zangGanShishen || []).join('/')}）
+- 時柱：${eightChar.hour.gan}${eightChar.hour.zhi}（天干十神：${eightChar.hour.ganShishen}，藏干：${eightChar.hour.zangGan.join('/')}，藏干十神：${(eightChar.hour.zangGanShishen || []).join('/')}）
+
+【天干五合檢驗結果】：${ganHeResult}
+
+【八字十神整體統計】：${godSummary || '無'}
 
 【八字五行數量統計】：
 - 木：${wuxingCounts.木} 個
@@ -93,6 +94,7 @@ ${dayyun.map((d: any) => `- ${d.age}歲起大運：${d.ganZhi}`).join('\n')}
   `.trim();
 }
 
+// 3. API Route 主入口
 export async function POST(req: Request) {
   try {
     const { baziData } = await req.json();
@@ -105,7 +107,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 格式化使用者八字數據
     const formattedText = buildBaziText(baziData);
 
     const response = await fetch('https://api.deepseek.com/chat/completions', {
@@ -116,19 +117,17 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         model: 'deepseek-chat',
-        temperature: 0.3, // 低隨機度，保證邏輯嚴謹
+        temperature: 0.3,
         messages: [
           {
             role: 'system',
-            content: `你是一位跟隨徐樂吾學習八字多年、深得徐樂吾真傳，精通子平八字、「滴天髓徵義」徐樂吾編註、「造化元鑰」徐樂吾評註、神峰通考、徐樂吾的有殺先論殺和「子平一得」蔡進源補註的資深命理專家。利用滴天髓中的扶抑、調候、通關定格局與用捉用神的技術，造化元鑰中的十天干在不同月令的喜忌，神峰通考中的病藥說和繼善編裡各種對命格的口訣，
-            徐樂吾有殺先論殺如殺比日主弱，以財滋弱殺論，如殺比日主強，以殺印相生或食神制殺論、蔡進源補註「子平一得」中的解釋來判斷八字格局高低，嚴禁使用朱鵲橋一派的任何理論來批算八字。
-請完全根據使用者提供的已知八字數據進行分析，嚴禁修改干支或自行重卜月算排盤。
+            content: `你是一位跟隨徐樂吾學習八字多年、深得徐樂吾真傳，精通子平八字、「滴天髓徵義」徐樂吾編註、「造化元鑰」徐樂吾評註、神峰通考、徐樂吾的有殺先論殺和「子平一得」蔡進源補註的資深命理專家。利用滴天髓中的扶抑、調候、通關定格局與用捉用神的技術，造化元鑰中的十天干在不同月令的喜忌，神峰通考中的病藥說和繼善編裡各種對命格的口訣，徐樂吾有殺先論殺如殺比日主弱，以財滋弱殺論，如殺比日主強，以殺印相生或食神制殺論、蔡進源補註「子平一得」中的解釋來判斷八字格局高低，嚴禁使用朱鵲橋一派的任何理論來批算八字。
+請完全根據使用者提供的已知八字數據進行分析，嚴禁修改干支或自行重新計算排盤。
 內容請嚴格分成以下六部分，並以 Markdown 格式輸出：
 
 ### 一、 日主旺衰、論調候、天干合化、定格局、評論格局高低，捉用神，詳細指出原局八字中的「病」和「藥」
 - 分析日主在月令的得令狀況與四柱整體氣勢。分析原局八字時，首要條件是先論日主屬陰屬陽，然後才論五行生尅制化。先看命主是陽日元還是陰日元，陽日元喜尅不喜泄，要有根，陰日元喜泄不喜尅，不怕弱
-- 必定依據此次序批原局裡是否有調候，第二步是跟據造化元鑰裡面，命主日元在不同月令需要什麼五行來做用神，第三步是看天干是否有合化，可跟據蔡進源師傅對天干五合的理論，甲己化土，乙庚合金，丙辛化水，丁壬合木，戊癸化火，以「逢合必化，只分真假」來判斷化神是否用神，忌神或是調候用神，可知對命局有沒有幫助。第四步如果有殺，則需要有殺先論殺
-，日主和殺相比，殺弱就以財滋殺，日主比殺弱，就必要用傷官或食神制殺，或用印化殺，最後是明確列出並解釋八字原局的「用神」、「病」和「藥神」。
+- 必定依據此次序批原局裡是否有調候，第二步是跟據造化元鑰裡面，命主日元在不同月令需要什麼五行來做用神，第三步是看天干是否有合化，可跟據蔡進源師傅對天干五合的理論，甲己化土，乙庚合金，丙辛化水，丁壬合木，戊癸化火，以「逢合必化，只分真假」來判斷化神是否用神，忌神或是調候用神，可知對命局有沒有幫助。第四步如果有殺，則需要有殺先論殺，日主和殺相比，殺弱就以財滋殺，日主比殺弱，就必要用傷官或食神制殺，或用印化殺，最後是明確列出並解釋八字原局的「用神」、「病」和「藥神」。
 
 ### 二、 格局與十神性格分析
 - 必須依據之前的八字分析，說明原命局的主要格局、破局，或者是無格局 (參考滴天髓中所提到的格局）。
