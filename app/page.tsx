@@ -215,6 +215,7 @@ function BaziForm({
     gender: 'male' | 'female';
     calendar: 'solar' | 'lunar';
     trueSolar: string;
+    userNotes: string;
   }) => void;
   loading: boolean;
 }) {
@@ -226,10 +227,39 @@ function BaziForm({
   const [month, setMonth] = useState('8');
   const [day, setDay] = useState('15');
   const [hour, setHour] = useState('14');
+  const [userNotes, setUserNotes] = useState('');
+  const [fileContent, setFileContent] = useState('');
+  const [fileName, setFileName] = useState('');
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setFileName(file.name);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setFileContent(event.target?.result as string);
+      };
+      reader.readAsText(file);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ name, year, month, day, hour, gender, calendar, trueSolar });
+    const noteParts = [
+      userNotes.trim(),
+      fileContent ? `【附加文檔內容 (${fileName})】:\n${fileContent}` : '',
+    ].filter(Boolean);
+    onSubmit({
+      name,
+      year,
+      month,
+      day,
+      hour,
+      gender,
+      calendar,
+      trueSolar,
+      userNotes: noteParts.join('\n\n'),
+    });
   };
 
   return (
@@ -343,6 +373,28 @@ function BaziForm({
             { value: 'off', label: '關閉（使用平太陽標準時）' },
           ]}
         />
+
+        <label className="flex flex-col gap-1.5 w-full">
+          <span className="text-xs font-medium text-slate-400">個人背景 / 提問（選填）</span>
+          <textarea
+            value={userNotes}
+            onChange={(e) => setUserNotes(e.target.value)}
+            rows={4}
+            placeholder="可補充經歷、想問的問題，或貼上參考資料"
+            className="w-full resize-y rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-amber-500/80 focus:ring-1 focus:ring-amber-500/40"
+          />
+        </label>
+
+        <div className="flex flex-col gap-1.5 w-full">
+          <span className="text-xs font-medium text-slate-400">上傳參考文檔（.txt / .md / .json）</span>
+          <input
+            type="file"
+            accept=".txt,.md,.json"
+            onChange={handleFileUpload}
+            className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer"
+          />
+          {fileName && <span className="text-[10px] text-amber-400">已載入文檔：{fileName}</span>}
+        </div>
 
         <button
           type="submit"
@@ -521,7 +573,7 @@ function PillarDetails({
   );
 }
 
-function AiAnalysis({ baziData }: { baziData: BaziResult | null }) {
+function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; userNotes: string }) {
   const [report, setReport] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
@@ -534,7 +586,7 @@ function AiAnalysis({ baziData }: { baziData: BaziResult | null }) {
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ baziData }),
+        body: JSON.stringify({ baziData, userNotes }),
       });
 
       const data = await res.json();
@@ -602,6 +654,7 @@ function AiAnalysis({ baziData }: { baziData: BaziResult | null }) {
 
 export default function Page() {
   const [baziData, setBaziData] = useState<BaziResult | null>(null);
+  const [userNotes, setUserNotes] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleFormSubmit = (formData: {
@@ -610,6 +663,7 @@ export default function Page() {
     day: string;
     hour: string;
     gender: 'male' | 'female';
+    userNotes: string;
   }) => {
     setLoading(true);
     setTimeout(() => {
@@ -621,6 +675,7 @@ export default function Page() {
         formData.gender
       );
       setBaziData(result);
+      setUserNotes(formData.userNotes);
       setLoading(false);
     }, 300);
   };
@@ -652,7 +707,7 @@ export default function Page() {
               <div className="flex w-full min-w-0 flex-col gap-5">
                 <FourPillars pillars={pillars} />
                 <PillarDetails pillars={pillars} distribution={distribution} luck={luck} />
-                <AiAnalysis baziData={baziData} />
+                <AiAnalysis baziData={baziData} userNotes={userNotes} />
               </div>
             ) : (
               <div className="flex h-full min-h-[380px] w-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 px-6 py-12 text-center">
