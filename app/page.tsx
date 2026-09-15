@@ -15,7 +15,6 @@ import {
   User,
   Venus,
   WandSparkles,
-  Sun,
   Calendar as CalendarIcon,
 } from 'lucide-react';
 
@@ -34,6 +33,7 @@ export interface BaziResult {
   wuxingCounts: { 木: number; 火: number; 土: number; 金: number; 水: number };
   dayyun: Array<{ age: number; ganZhi: string }>;
 }
+
 /* ------------------------------------------------------------------ */
 /* 五行深色主題樣式設定                                                 */
 /* ------------------------------------------------------------------ */
@@ -77,21 +77,28 @@ const ZHI_ELEMENT: Record<string, Element> = {
 
 type PillarKey = 'year' | 'month' | 'day' | 'hour';
 
-// 1. 更新 Pillar 介面
 interface Pillar {
   key: PillarKey;
   label: string;
   sublabel: string;
   heavenlyStem: string;
   heavenlyElement: Element;
-  heavenlyTenGod: string; // 天干十神
+  heavenlyTenGod: string;
   earthlyBranch: string;
   earthlyElement: Element;
-  earthlyTenGod: string;  // 地支本氣十神
+  earthlyTenGod: string;
   hiddenStems: { char: string; element: Element; god: string }[];
 }
 
-// 2. 更新 mapBaziToPillars 轉換函式
+interface LuckPeriod {
+  age: string;
+  year: string;
+  stem: string;
+  branch: string;
+  element: Element;
+  current?: boolean;
+}
+
 function mapBaziToPillars(bazi: BaziResult): Pillar[] {
   const keys: PillarKey[] = ['year', 'month', 'day', 'hour'];
   const labels = ['年柱', '月柱', '日柱', '時柱'];
@@ -117,7 +124,7 @@ function mapBaziToPillars(bazi: BaziResult): Pillar[] {
       heavenlyTenGod: pData.ganShishen,
       earthlyBranch: eZhi,
       earthlyElement: ZHI_ELEMENT[eZhi] || 'wood',
-      earthlyTenGod: pData.zhiShishen || hiddenStems[0]?.god || '',
+      earthlyTenGod: (pData as any).zhiShishen || hiddenStems[0]?.god || '',
       hiddenStems,
     };
   });
@@ -228,27 +235,9 @@ function BaziForm({
   const [day, setDay] = useState('15');
   const [hour, setHour] = useState('14');
   const [userNotes, setUserNotes] = useState('');
-  const [fileContent, setFileContent] = useState('');
-  const [fileName, setFileName] = useState('');
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setFileName(file.name);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setFileContent(event.target?.result as string);
-      };
-      reader.readAsText(file);
-    }
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const noteParts = [
-      userNotes.trim(),
-      fileContent ? `【附加文檔內容 (${fileName})】:\n${fileContent}` : '',
-    ].filter(Boolean);
     onSubmit({
       name,
       year,
@@ -258,7 +247,7 @@ function BaziForm({
       gender,
       calendar,
       trueSolar,
-      userNotes: noteParts.join('\n\n'),
+      userNotes: userNotes.trim(),
     });
   };
 
@@ -375,26 +364,15 @@ function BaziForm({
         />
 
         <label className="flex flex-col gap-1.5 w-full">
-          <span className="text-xs font-medium text-slate-400">個人背景 / 提問（選填）</span>
+          <span className="text-xs font-medium text-slate-400">個人背景 / 特質提問（選填）</span>
           <textarea
             value={userNotes}
             onChange={(e) => setUserNotes(e.target.value)}
             rows={4}
-            placeholder="可補充經歷、想問的問題，或貼上參考資料"
+            placeholder="可補充個人經歷或特定想詢問的問題..."
             className="w-full resize-y rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-amber-500/80 focus:ring-1 focus:ring-amber-500/40"
           />
         </label>
-
-        <div className="flex flex-col gap-1.5 w-full">
-          <span className="text-xs font-medium text-slate-400">上傳參考文檔（.txt / .md / .json）</span>
-          <input
-            type="file"
-            accept=".txt,.md,.json"
-            onChange={handleFileUpload}
-            className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer"
-          />
-          {fileName && <span className="text-[10px] text-amber-400">已載入文檔：{fileName}</span>}
-        </div>
 
         <button
           type="submit"
@@ -450,7 +428,6 @@ function FourPillars({ pillars }: { pillars: Pillar[] }) {
               </header>
 
               <div className="mb-2.5 flex flex-col gap-1.5">
-                {/* 天干方塊 + 天干十神 */}
                 <div className="relative">
                   <GlyphBlock char={p.heavenlyStem} element={p.heavenlyElement} caption="天干 · " />
                   <span className="absolute top-1.5 right-1.5 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-medium text-amber-400 border border-amber-500/30">
@@ -458,7 +435,6 @@ function FourPillars({ pillars }: { pillars: Pillar[] }) {
                   </span>
                 </div>
 
-                {/* 地支方塊 + 地支本氣十神 */}
                 <div className="relative">
                   <GlyphBlock char={p.earthlyBranch} element={p.earthlyElement} caption="地支 · " />
                   <span className="absolute top-1.5 right-1.5 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-medium text-slate-300 border border-slate-700/50">
