@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ADMIN_REFERENCE_DOCS } from '@/lib/adminKnowledge'; // 1. 引入管理員知識庫
 
-// 延長 Vercel 超時限制至 60 秒
+// 雙 AI 協作需要執行兩次 API 呼叫，設定 60 秒 Vercel 超時限制
 export const maxDuration = 60;
 
 // 1. 自動計算天干五合（獨立函式）
@@ -31,14 +31,12 @@ function checkGanHe(gans: string[]) {
   return uniqueFound.length > 0 ? uniqueFound.join('、') : '原局天干無五合組合';
 }
 
-// 2. 構建傳給 AI 的八字 Prompt 文字（含明確命主性別）
+// 2. 構建傳給 DeepSeek / Gemini / Qwen 的八字 Prompt 文字
 function buildBaziText(baziData: any, userNotes?: string) {
   const { eightChar, dayGan, dayGanWuxing, wuxingCounts, dayyun, solarDate, lunarDate, gender, genderText } = baziData;
 
-  // 自動判斷並標示性別
   const genderDisplay = genderText || (gender === 'female' ? '坤造（女）' : '乾造（男）');
 
-  // 自動彙整四柱天干與藏干的所有十神
   const allTenGods: string[] = [
     eightChar.year.ganShishen,
     ...(eightChar.year.zangGanShishen || []),
@@ -50,7 +48,6 @@ function buildBaziText(baziData: any, userNotes?: string) {
     ...(eightChar.hour.zangGanShishen || []),
   ].filter(Boolean);
 
-  // 統計各十神出現次數
   const godCounts: Record<string, number> = {};
   allTenGods.forEach((god) => {
     if (god !== '日主') {
@@ -62,7 +59,6 @@ function buildBaziText(baziData: any, userNotes?: string) {
     .map(([god, count]) => `${god}:${count}個`)
     .join('、');
 
-  // 計算天干五合
   const fourGans = [
     eightChar.year.gan,
     eightChar.month.gan,
@@ -106,7 +102,7 @@ ${dayyun.map((d: any) => `- ${d.age}歲起大運：${d.ganZhi}`).join('\n')}
   `.trim();
 }
 
-// 3. API Route 主入口（DeepSeek + Qwen 初批，Gemini 總審閱）
+// 3. API Route 主入口
 export async function POST(req: Request) {
   try {
     const { baziData, userNotes } = await req.json();
@@ -149,7 +145,6 @@ export async function POST(req: Request) {
 - 必須嚴格遵守用木忌金，用金忌火，用火忌水，用水忌土，用土忌木
 
 【參考文獻與指定批命規範】：
-以下為命理師指定的內部參考法則，請在每次推論時必須參照：
 --------------------------------------------------
 ${ADMIN_REFERENCE_DOCS}
 --------------------------------------------------
@@ -208,7 +203,6 @@ ${ADMIN_REFERENCE_DOCS}
     // 1.2 Qwen (通義千問) 請求
     const qwenPromise = qwenKey ? (
       process.env.OPENROUTER_API_KEY ? 
-        // 使用 OpenRouter 呼叫 Qwen
         fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -224,7 +218,6 @@ ${ADMIN_REFERENCE_DOCS}
             ],
           }),
         }) : 
-        // 使用阿里雲 DashScope 呼叫 Qwen
         fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -242,7 +235,7 @@ ${ADMIN_REFERENCE_DOCS}
         })
     ).then(res => res.ok ? res.json() : null).catch(() => null) : Promise.resolve(null);
 
-    // 平行發送，同時等待 DeepSeek 與 Qwen 結果
+    // 同時等待 DeepSeek 與 Qwen
     const [deepseekData, qwenData] = await Promise.all([deepseekPromise, qwenPromise]);
 
     const draftDeepseek = deepseekData?.choices?.[0]?.message?.content || '';
@@ -251,12 +244,11 @@ ${ADMIN_REFERENCE_DOCS}
     // ==================================================================
     // 第二階段：Gemini 進行「大師總審閱」與最終批命報告裁決
     // ==================================================================
-    if (!geminiKey) {
-      // 若未設定 GEMINI_API_KEY，自動安全降級回傳 DeepSeek 或 Qwen 報告
-      return NextResponse.json({ result: draftDeepseek || draftQwen || '未取得初批結果' });
-    }
+    let finalReport = '';
+    let geminiUsed = false;
 
-    const geminiPrompt = `
+    if (geminiKey) {
+      const geminiPrompt = `
 你是一位權威八字命理總審閱官，精通子平八字、《滴天髓徵義》、《造化元鑰》、《子平一得》、神峰通考和命理師指定的內部參考法則。
 以下是由兩位命理 AI（DeepSeek 與 Qwen 通義千問）對同一八字進行的初批草稿。
 
@@ -280,35 +272,57 @@ ${draftQwen || '（Qwen 未回應）'}
 --------------------------------------------------
 `.trim();
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
 
-    try {
-      const geminiResponse = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: geminiPrompt }] }],
-          generationConfig: {
-            temperature: 0.2,
-          },
-        }),
-      });
+      try {
+        const geminiResponse = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: geminiPrompt }] }],
+            generationConfig: { temperature: 0.2 },
+          }),
+        });
 
-      if (geminiResponse.ok) {
-        const geminiData = await geminiResponse.json();
-        const finalReport = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (finalReport && finalReport.trim() !== '') {
-          return NextResponse.json({ result: finalReport });
+        if (geminiResponse.ok) {
+          const geminiData = await geminiResponse.json();
+          const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text && text.trim() !== '') {
+            finalReport = text;
+            geminiUsed = true;
+          }
         }
+      } catch (gErr) {
+        console.warn('Gemini 審閱連線異常，自動降級:', gErr);
       }
-    } catch (gErr) {
-      console.warn('Gemini 審閱連線異常，自動降級使用初批報告:', gErr);
     }
 
-    // 若 Gemini 呼叫失敗，安全降級回傳成功產出的初批結果
-    return NextResponse.json({ result: draftDeepseek || draftQwen });
+    // 若 Gemini 呼叫失敗或未設定，降級回傳成功產出的初批結果
+    if (!finalReport) {
+      finalReport = draftDeepseek || draftQwen || '未取得分析結果';
+    }
+
+    // ==================================================================
+    // 三 AI 狀態控制台 Log 輸出（可以在 Vercel Logs 中直接查看）
+    // ==================================================================
+    console.log('--------------------------------------------------');
+    console.log('【三 AI 聯合會診調用狀態總覽】：');
+    console.log(`1. DeepSeek 初批 ： ${draftDeepseek ? '✅ 成功回應' : '❌ 失敗 / 未調用'}`);
+    console.log(`2. Qwen (千問) 初批 ： ${draftQwen ? '✅ 成功回應' : '❌ 失敗 / 未設定 Key'}`);
+    console.log(`3. Gemini 總審閱  ： ${geminiUsed ? '✅ 成功稽核' : '❌ 失敗 / 降級輸出'}`);
+    console.log('--------------------------------------------------');
+
+    return NextResponse.json({
+      result: finalReport,
+      meta: {
+        deepseekUsed: !!draftDeepseek,
+        qwenUsed: !!draftQwen,
+        geminiUsed: geminiUsed,
+      },
+    });
 
   } catch (error: any) {
+    console.error('伺服器處理異常:', error);
     return NextResponse.json(
       { error: error.message || '伺服器內部錯誤' },
       { status: 500 }
