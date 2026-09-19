@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ADMIN_REFERENCE_DOCS } from '@/lib/adminKnowledge'; // 1. 引入管理員知識庫
 
-// 雙 AI 協作需要執行兩次 API 呼叫，設定 60 秒 Vercel 超時限制
+// 延長 Vercel 超時限制至 60 秒
 export const maxDuration = 60;
 
 // 1. 自動計算天干五合（獨立函式）
@@ -31,7 +31,7 @@ function checkGanHe(gans: string[]) {
   return uniqueFound.length > 0 ? uniqueFound.join('、') : '原局天干無五合組合';
 }
 
-// 2. 構建傳給 DeepSeek / Gemini 的八字 Prompt 文字（含明確命主性別）
+// 2. 構建傳給 AI 的八字 Prompt 文字（含明確命主性別）
 function buildBaziText(baziData: any, userNotes?: string) {
   const { eightChar, dayGan, dayGanWuxing, wuxingCounts, dayyun, solarDate, lunarDate, gender, genderText } = baziData;
 
@@ -106,12 +106,13 @@ ${dayyun.map((d: any) => `- ${d.age}歲起大運：${d.ganZhi}`).join('\n')}
   `.trim();
 }
 
-// 3. API Route 主入口（DeepSeek 初批 + Gemini 總審閱雙 AI 流程）
+// 3. API Route 主入口（DeepSeek + Qwen 初批，Gemini 總審閱）
 export async function POST(req: Request) {
   try {
     const { baziData, userNotes } = await req.json();
 
     const deepseekKey = process.env.DEEPSEEK_API_KEY;
+    const qwenKey = process.env.QWEN_API_KEY || process.env.OPENROUTER_API_KEY;
     const geminiKey = process.env.GEMINI_API_KEY;
 
     if (!deepseekKey) {
@@ -123,23 +124,7 @@ export async function POST(req: Request) {
 
     const formattedText = buildBaziText(baziData, userNotes);
 
-    // ==================================================================
-    // 第一階段：DeepSeek 依據內部 18 條秘傳法則進行排盤初批
-    // ==================================================================
-    const deepseekResponse = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${deepseekKey}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        temperature: 0.0,
-        top_p: 0.1,
-        messages: [
-          {
-            role: 'system',
-            content: `你是一位跟隨徐樂吾學習八字多年、深得徐樂吾真傳，精通子平八字、「滴天髓徵義」徐樂吾編註、「造化元鑰」徐樂吾評註、神峰通考、徐樂吾的有殺先論殺和「子平一得」蔡進源補註的資深命理專家。利用滴天髓中的扶抑、調候、通關定格局與用捉用神的技術，造化元鑰中的十天干在不同月令的十天干喜忌，神峰通考中的病藥說和繼善編裡各種對命格的口訣，徐樂吾有殺先論殺如殺比日主弱，以財滋弱殺論，如殺比日主強，以殺印相生或食神制殺論、蔡進源補註「子平一得」中的命例來判斷八字格局高低，嚴禁使用朱鵲橋一派的任何理論來批算八字。
+    const initialSystemPrompt = `你是一位跟隨徐樂吾學習八字多年、深得徐樂吾真傳，精通子平八字、「滴天髓徵義」徐樂吾編註、「造化元鑰」徐樂吾評註、神峰通考、徐樂吾的有殺先論殺和「子平一得」蔡進源補註的資深命理專家。利用滴天髓中的扶抑、調候、通關定格局與用捉用神的技術，造化元鑰中的十天干在不同月令的十天干喜忌，神峰通考中的病藥說和繼善編裡各種對命格的口訣，徐樂吾有殺先論殺如殺比日主弱，以財滋弱殺論，如殺比日主強，以殺印相生或食神制殺論、蔡進源補註「子平一得」中的命例來判斷八字格局高低，嚴禁使用朱鵲橋一派的任何理論來批算八字。
 請必定要完全根據使用者提供的已知八字數據，參考文檔，滴天髓徵義，造化元鑰，神峰通考，子平一得等書藉進行分析，嚴禁修改干支或自行重新計算排盤。
 
 【性別與感情婚姻批斷嚴格約束】：
@@ -150,14 +135,14 @@ export async function POST(req: Request) {
 【命理分析穩定性與一致性約束】：
 1. 【確定性推導原則】：相同八字原局必須導出唯一的日主用神判定，嚴禁在不同批算中出現矛盾結論。
 2. 【用神一貫性】：一旦在第一部分判定日主的用神，後續所有關於大運吉凶、感情婚姻、事業建議的分析，必須 100% 圍繞該用神進行演繹，不得出現用神前後不一致的情況。
-3.  捉用神必須先參照造化元鑰中十天干在不同月令的喜忌，滴天髓補註中的命例，子平一得的命例，必須在原局八字中找出有用之神，不可用地支藏元做用神，五行雖弱，但仍可作用神，如果八字天干地支入面找不到有用之神，除非該五行在原局中被傷盡，否則都應在原局中捉用神，日元必須當令的情況下，才可在月令藏元中捉用神，否則需要判斷是否無用神。
-4.  喜忌之定義是生旺用神是喜神，八字之中有用之神為用神，忌神為尅用神之神，病為原局八字問題之處，藥神為醫治病的藥。
+3. 捉用神必須先參照造化元鑰中十天干在不同月令的喜忌，滴天髓補註中的命例，子平一得的命例，必須在原局八字中找出有用之神，不可用地支藏元做用神，五行雖弱，但仍可作用神，如果八字天干地支入面找不到有用之神，除非該五行在原局中被傷盡，否則都應在原局中捉用神，日元必須當令的情況下，才可在月令藏元中捉用神，否則需要判斷是否無用神。
+4. 喜忌之定義是生旺用神是喜神，八字之中有用之神為用神，忌神為尅用神之神，病為原局八字問題之處，藥神為醫治病的藥。
 
 流年運勢評語
-1.  必須跟據真實時間之年份來批算流年。
+1. 必須跟據真實時間之年份來批算流年。
 
 批命報告格式
-1.  每次批命報告必須要以最專業的態度，詳盡分析命主的事業，感情和健康的好處與壞處，命書格式和內容每次分析都必須相同，以免出現同一用戶重覆批算相同命格，或不同命主批命時，會出現不同結果和格式。
+1. 每次批命報告必須要以最專業的態度，詳盡分析命主的事業，感情和健康的好處與壞處，命書格式和內容每次分析都必須相同，以免出現同一用戶重覆批算相同命格，或不同命主批命時，會出現不同結果和格式。
 
 五行生尅
 - 木生火，火生土，土生金，金生水，水生木
@@ -196,55 +181,102 @@ ${ADMIN_REFERENCE_DOCS}
 ### 六、 當下流年運勢評語
 - 利用日主所輸入的出生日期，結合八字命盤，配合大運及流年，利用十神含意，生尅制化，詳細評估對命主該年流年運勢的影響，包括吉凶、變化與可能的發展方向，並提供趨吉避凶的方法
 
-語氣請保持客觀、理性且富有建設性，避免過度武斷或誇大災禍。`,
-          },
-          {
-            role: 'user',
-            content: `請幫我分析以下八字命盤數據：\n\n${formattedText}`,
-          },
+語氣請保持客觀、理性且富有建設性，避免過度武斷或誇大災禍。`;
+
+    // ==================================================================
+    // 第一階段：DeepSeek 與 Qwen 平行同步進行初批 (Promise.all)
+    // ==================================================================
+
+    // 1.1 DeepSeek 請求
+    const deepseekPromise = fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${deepseekKey}`,
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        temperature: 0.0,
+        top_p: 0.1,
+        messages: [
+          { role: 'system', content: initialSystemPrompt },
+          { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
         ],
       }),
-    });
+    }).then(res => res.ok ? res.json() : null).catch(() => null);
 
-    if (!deepseekResponse.ok) {
-      const errorText = await deepseekResponse.text();
-      return NextResponse.json(
-        { error: `DeepSeek API 呼叫失敗: ${errorText}` },
-        { status: deepseekResponse.status }
-      );
-    }
+    // 1.2 Qwen (通義千問) 請求
+    const qwenPromise = qwenKey ? (
+      process.env.OPENROUTER_API_KEY ? 
+        // 使用 OpenRouter 呼叫 Qwen
+        fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${qwenKey}`,
+          },
+          body: JSON.stringify({
+            model: 'qwen/qwen-2.5-72b-instruct',
+            temperature: 0.0,
+            messages: [
+              { role: 'system', content: initialSystemPrompt },
+              { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
+            ],
+          }),
+        }) : 
+        // 使用阿里雲 DashScope 呼叫 Qwen
+        fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${qwenKey}`,
+          },
+          body: JSON.stringify({
+            model: 'qwen-max',
+            temperature: 0.0,
+            messages: [
+              { role: 'system', content: initialSystemPrompt },
+              { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
+            ],
+          }),
+        })
+    ).then(res => res.ok ? res.json() : null).catch(() => null) : Promise.resolve(null);
 
-    const deepseekData = await deepseekResponse.json();
-    const draftReport = deepseekData.choices[0]?.message?.content || '未取得 DeepSeek 初批結果';
+    // 平行發送，同時等待 DeepSeek 與 Qwen 結果
+    const [deepseekData, qwenData] = await Promise.all([deepseekPromise, qwenPromise]);
+
+    const draftDeepseek = deepseekData?.choices?.[0]?.message?.content || '';
+    const draftQwen = qwenData?.choices?.[0]?.message?.content || '';
 
     // ==================================================================
-    // 第二階段：Gemini 進行「大師總審閱」與跨模型交叉糾錯
+    // 第二階段：Gemini 進行「大師總審閱」與最終批命報告裁決
     // ==================================================================
     if (!geminiKey) {
-      // 若未設定 GEMINI_API_KEY，自動安全降級回傳 DeepSeek 報告
-      return NextResponse.json({ result: draftReport });
+      // 若未設定 GEMINI_API_KEY，自動安全降級回傳 DeepSeek 或 Qwen 報告
+      return NextResponse.json({ result: draftDeepseek || draftQwen || '未取得初批結果' });
     }
 
     const geminiPrompt = `
 你是一位權威八字命理總審閱官，精通子平八字、《滴天髓徵義》、《造化元鑰》、《子平一得》、神峰通考和命理師指定的內部參考法則。
-請幫我稽核以下由初階命理師生成的【初批報告草稿】。
+以下是由兩位命理 AI（DeepSeek 與 Qwen 通義千問）對同一八字進行的初批草稿。
 
 【審閱與嚴格修正要求】：
-1. 嚴格對照【原八字排盤數據】與【內部參考規範】，檢查初批報告有無「十神生剋錯誤」、「天干合化誤判」或「前後喜用神不一致」等邏輯矛盾，在批斷大運和流年吉凶等事情，是否有所遺漏錯誤，如有，應作出補註或修改
-2. 查看初批報告有沒有嚴格對照所有要求，命理師內部參考資料，滴天髓徵義，造化元鑰，子平一得，神峰通考等資料和書藉來批命，權威八字命理師要審對有沒有遺漏，如有要補註，亦要審對有沒有批錯，如有要修改
+1. 嚴格對照【原八字排盤數據】與【內部參考規範】，對比 DeepSeek 與 Qwen 對於「用神、格局、病藥、喜忌」的判定。若兩者一致則採納；若有分歧，必須依據《造化元鑰》十干月令喜忌與《子平一得》為唯一標準進行裁決，確定唯一的格局與用神，嚴禁出現矛盾。
+2. 檢查初批報告有無「十神生剋錯誤」、「天干合化誤判」或「前後喜用神不一致」等邏輯矛盾，在批斷大運和流年吉凶等事情，是否有所遺漏錯誤，如有，應作出補註或修改。
 3. 確保第四部分感情婚姻分析 100% 符合命主的實際性別（男命論妻、女命論夫），完全刪除任何「假設命主為男/女」等不確定字眼。
-4. 檢查「格局」與「用神」是否唯一，嚴禁同時出現兩種矛盾格局判定，所有格局和用神判定，都必須跟據【命理分析穩定性與一致性約束】和命理師指定的內部參考法則來判斷
-5. 修正初批報告中的語病與排版，優化為文筆流暢、客觀且權威的最終命理報告。
+4. 檢查「格局」與「用神」是否唯一，嚴禁同時出現兩種矛盾格局判定。
+5. 出身、事業、感情和健康須要更專業、更詳盡解釋每個可能性給命主知道，如初級報告沒有提及或有遺漏，需要修改和補註。
 6. 請完全保留「六大章節 (### 一、至 ### 六、)」Markdown 格式輸出。
-7. 大運批斷需要跟據十神含意和命理師指定的內部參考法則來批斷該大運有可能發生的吉事和凶事，如初批報告沒有提及到，需予以修改或補註
-8. 出身、事業、感情和健康須要更專業、更詳盡解釋每個可能性給命主知道，如初級報告沒有提及或有遺漏，需要修改和補註
 
 --------------------------------------------------
 【原八字排盤數據與內部規範】：
 ${formattedText}
 
-【初批報告草稿】：
-${draftReport}
+【初批草稿一 (DeepSeek)】：
+${draftDeepseek || '（DeepSeek 未回應）'}
+
+【初批草稿二 (Qwen 通義千問)】：
+${draftQwen || '（Qwen 未回應）'}
 --------------------------------------------------
 `.trim();
 
@@ -270,11 +302,11 @@ ${draftReport}
         }
       }
     } catch (gErr) {
-      console.warn('Gemini 審閱連線異常，自動降級使用 DeepSeek 初批報告:', gErr);
+      console.warn('Gemini 審閱連線異常，自動降級使用初批報告:', gErr);
     }
 
-    // 若 Gemini 呼叫失敗，降級回傳 DeepSeek 初批結果
-    return NextResponse.json({ result: draftReport });
+    // 若 Gemini 呼叫失敗，安全降級回傳成功產出的初批結果
+    return NextResponse.json({ result: draftDeepseek || draftQwen });
 
   } catch (error: any) {
     return NextResponse.json(
