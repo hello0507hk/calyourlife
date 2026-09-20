@@ -301,43 +301,42 @@ ${draftQwen || '（Qwen 未回應）'}
 --------------------------------------------------
 `.trim();
 
-      // 使用穩定的 Gemini 1.5 端點（避免 gemini-2.5-flash 404）
-      const candidateModels = ['gemini-1.5-flash', 'gemini-1.5-pro'];
+      // 使用 Google AI Studio 官方最穩定的標準端點
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
 
-      for (const model of candidateModels) {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+      try {
+        const geminiResponse = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: geminiPrompt }] }],
+            // 允許命理術語（如：死、夭、殺、傷）通過安全審核
+            safetySettings: [
+              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+            ],
+            generationConfig: { temperature: 0.2 },
+          }),
+        });
 
-        try {
-          const geminiResponse = await fetch(geminiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: geminiPrompt }] }],
-              safetySettings: [
-                { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-                { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-                { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-                { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-              ],
-              generationConfig: { temperature: 0.2 },
-            }),
-          });
-
-          if (geminiResponse.ok) {
-            const geminiData = await geminiResponse.json();
-            const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text && text.trim() !== '') {
-              finalReport = text;
-              geminiUsed = true;
-              console.log(`✅ Gemini 大師總審閱成功！使用最新模型: ${model}`);
-              break; // 成功即跳出迴圈
-            }
+        if (geminiResponse.ok) {
+          const geminiData = await geminiResponse.json();
+          const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text && text.trim() !== '') {
+            finalReport = text;
+            geminiUsed = true;
+            console.log('✅ Gemini 大師總審閱成功回應！');
           } else {
-            console.warn(`⚠️ Gemini 模型 [${model}] 呼叫 HTTP ${geminiResponse.status}:`, await geminiResponse.text());
+            console.warn('⚠️ Gemini 回傳空內容:', JSON.stringify(geminiData));
           }
-        } catch (gErr) {
-          console.error(`❌ Gemini 模型 [${model}] 請求例外:`, gErr);
+        } else {
+          const errorErr = await geminiResponse.text();
+          console.error(`❌ Gemini API 失敗 [HTTP ${geminiResponse.status}]:`, errorErr);
         }
+      } catch (gErr) {
+        console.error('❌ Gemini 網路連線異常:', gErr);
       }
     }
 
