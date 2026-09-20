@@ -291,6 +291,7 @@ ${ADMIN_REFERENCE_DOCS}
 6. 請完全保留「六大章節 (### 一、至 ### 六、)」Markdown 格式輸出。
 7. 嚴格遵從有殺先論殺的規定
 8. 批斷時必定要遵從內部參考法則
+9. 地支除月令外，其他一律不可以做用神
 
 --------------------------------------------------
 【原八字排盤數據與內部規範】：
@@ -305,7 +306,7 @@ ${draftQwen || '（Qwen 未回應）'}
 `.trim();
 
       // 使用 Google AI Studio 官方最穩定的標準端點
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${cleanGeminiKey}`;
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${cleanGeminiKey}`;
 
       try {
         const geminiResponse = await fetch(geminiUrl, {
