@@ -301,8 +301,8 @@ ${draftQwen || '（Qwen 未回應）'}
 --------------------------------------------------
 `.trim();
 
-      // 最新 Gemini 模型優先列表（自動降級備用）
-      const candidateModels = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+      // 使用穩定的 Gemini 1.5 端點（避免 gemini-2.5-flash 404）
+      const candidateModels = ['gemini-1.5-flash', 'gemini-1.5-pro'];
 
       for (const model of candidateModels) {
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
