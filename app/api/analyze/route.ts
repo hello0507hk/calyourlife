@@ -277,17 +277,20 @@ ${ADMIN_REFERENCE_DOCS}
     let geminiUsed = false;
 
     if (geminiKey) {
+      const cleanGeminiKey = geminiKey.trim();
       const geminiPrompt = `
 你是一位權威八字命理總審閱官，精通子平八字、《滴天髓徵義》、《造化元鑰》、《子平一得》、神峰通考和命理師指定的內部參考法則。
 以下是由兩位命理 AI（DeepSeek 與 Qwen 通義千問）對同一八字進行的初批草稿。
 
 【審閱與嚴格修正要求】：
-1. 嚴格對照【原八字排盤數據】與【內部參考規範】，對比 DeepSeek 與 Qwen 對於「用神、格局、病藥、喜忌」的判定。若兩者一致則採納；若有分歧，必須依據《造化元鑰》十干月令喜忌與《子平一得》為唯一標準進行裁決，確定唯一的格局與用神，嚴禁出現矛盾。
+1. 嚴格對照【原八字排盤數據】與【內部參考規範】，對比 DeepSeek 與 Qwen 對於「用神、格局、病藥、喜忌」的判定。若兩者一致則採納；若有分歧，必須依據《造化元鑰》十干月令喜忌與《子平一得》為唯一標準進行裁決，確定唯一的格局與用神，嚴禁出現矛盾，用神不等於調候用神。
 2. 檢查初批報告有無「十神生剋錯誤」、「天干合化誤判」或「前後喜用神不一致」等邏輯矛盾，在批斷大運和流年吉凶等事情，是否有所遺漏錯誤，如有，應作出補註或修改。
 3. 確保第四部分感情婚姻分析 100% 符合命主的實際性別（男命論妻、女命論夫），完全刪除任何「假設命主為男/女」等不確定字眼。
 4. 檢查「格局」與「用神」是否唯一，嚴禁同時出現兩種矛盾格局判定。
 5. 出身、事業、感情和健康須要更專業、更詳盡解釋每個可能性給命主知道，如初級報告沒有提及或有遺漏，需要修改和補註。
 6. 請完全保留「六大章節 (### 一、至 ### 六、)」Markdown 格式輸出。
+7. 嚴格遵從有殺先論殺的規定
+8. 批斷時必定要遵從內部參考法則
 
 --------------------------------------------------
 【原八字排盤數據與內部規範】：
@@ -302,7 +305,7 @@ ${draftQwen || '（Qwen 未回應）'}
 `.trim();
 
       // 使用 Google AI Studio 官方最穩定的標準端點
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${cleanGeminiKey}`;
 
       try {
         const geminiResponse = await fetch(geminiUrl, {
