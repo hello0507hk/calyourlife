@@ -14,105 +14,100 @@ body {
   overflow-x: hidden;
 }
 /* ==================================================================
-   列印與 PDF 匯出專用 CSS 樣式優化
+   A4 緊湊列印版面專用樣式 (徹底解決 11 頁空白與 Safari 膨脹問題)
    ================================================================== */
    @media print {
-    /* 隱藏網頁中非報告的元素 (例如 Navigation, Footer, 輸入框) */
-    header,
-    footer,
-    nav,
-    form,
-    .no-print {
+    /* 1. 設定 A4 頁面邊界 (上下 10mm、左右 12mm) */
+    @page {
+      size: A4 portrait;
+      margin: 10mm 12mm 10mm 12mm;
+    }
+  
+    /* 2. 重設根容器，解除 Safari 的高度與 overflow 限制 */
+    html, body, main {
+      background-color: #ffffff !important;
+      color: #0f172a !important;
+      height: auto !important;
+      min-height: auto !important;
+      overflow: visible !important;
+      width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+  
+    /* 3. 保留五行色塊背景與清晰文字 */
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      box-shadow: none !important;
+      text-shadow: none !important;
+    }
+  
+    /* 4. 隱藏輸入表單與按鈕 */
+    header, footer, nav, form, button, .print\:hidden {
       display: none !important;
     }
   
-    /* 強制列印背景色（如需保留配色） */
-    body {
+    /* 5. 解除網頁版兩欄佈局，讓內容直排鋪滿 A4 */
+    .grid {
+      display: block !important;
+      width: 100% !important;
+    }
+  
+    /* 四柱八字卡片保持 4 欄一字排開 */
+    .grid-cols-2.sm\:grid-cols-4 {
+      display: grid !important;
+      grid-template-columns: repeat(4, 1fr) !important;
+      gap: 8px !important;
+    }
+  
+    /* 6. 卡片邊框與樣式轉為淺色列印版 */
+    section, article, .rounded-2xl, .rounded-xl {
+      border-color: #cbd5e1 !important;
       background-color: #ffffff !important;
-      color: #000000 !important;
-      font-size: 12pt;
+      color: #0f172a !important;
+      margin-bottom: 10px !important;
     }
   
-    /* 避免章節標題在頁尾被尷尬截斷 */
-    h1, h2, h3, h4 {
-      page-break-after: avoid;
-      break-after: avoid;
+    /* 7. 精確控制斷頁：僅標題防孤行，允許長文章自然跨頁流動 */
+    h1, h2, h3, h4, h5, h6 {
+      break-after: avoid !important;
+      page-break-after: avoid !important;
+      color: #0f172a !important;
     }
   
-    /* 確保每個大章節分頁順暢 */
-    section, .print-section {
-      page-break-inside: avoid;
-      break-inside: avoid;
+    /* 8. AI 命理報告 Markdown 字體與行高緊湊化 */
+    .prose {
+      max-width: 100% !important;
+      font-size: 10pt !important;
+      line-height: 1.5 !important;
+      color: #1e293b !important;
+    }
+  
+    /* 縮減 Markdown 段落與標題間距 */
+    .prose p {
+      margin-top: 0.3em !important;
+      margin-bottom: 0.3em !important;
+    }
+  
+    .prose h3 {
+      font-size: 11pt !important;
+      font-weight: 700 !important;
+      border-bottom: 1px solid #cbd5e1 !important;
+      padding-bottom: 2px !important;
+      margin-top: 0.8em !important;
+      margin-bottom: 0.3em !important;
+      color: #0f172a !important;
+    }
+  
+    .prose ul, .prose ol {
+      margin-top: 0.2em !important;
+      margin-bottom: 0.2em !important;
+      padding-left: 1.2em !important;
+    }
+  
+    .prose li {
+      margin-top: 0.1em !important;
+      margin-bottom: 0.1em !important;
     }
   }
-  /* ==================================================================
-   A4 紙張最大化版面專用樣式 (@media print)
-   ================================================================== */
-@media print {
-  /* 1. 設定 A4 頁面尺寸與邊界（上下 8mm、左右 10mm，極致利用版面） */
-  @page {
-    size: A4 portrait;
-    margin: 8mm 10mm 8mm 10mm;
-  }
-
-  /* 2. 重設全域容器，強制解除網頁版的 max-w-6xl 寬度限制與留白 */
-  html, body, main, div, section, article {
-    background-color: #ffffff !important;
-    color: #0f172a !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    box-shadow: none !important;
-  }
-
-  /* 3. 允許保留五行色塊背景與文字色彩（讓色彩在 PDF 完美呈現） */
-  * {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
-  /* 4. 隱藏輸入表單、按鈕、頁首 navigation 等 UI 元素 */
-  header,
-  footer,
-  nav,
-  form,
-  button,
-  .print\:hidden {
-    display: none !important;
-  }
-
-  /* 5. 四柱八字與五行圖表橫向鋪滿 A4 寬度 */
-  .grid {
-    display: grid !important;
-    width: 100% !important;
-  }
-
-  /* 強制四柱八字卡片在 A4 上一字排開（4 欄平行鋪滿） */
-  .grid-cols-2 {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-  }
-
-  /* 6. 防斷頁控制：避免圖表或章節在頁尾被切成兩半 */
-  section, article, .rounded-2xl, .rounded-xl {
-    break-inside: avoid !important;
-    page-break-inside: avoid !important;
-    margin-bottom: 14px !important;
-    border-color: #cbd5e1 !important; /* 轉換為清晰的淺灰色精緻邊框 */
-  }
-
-  /* 防止標題留在頁尾孤立（孤行控制） */
-  h1, h2, h3, h4, h5, h6 {
-    break-after: avoid !important;
-    page-break-after: avoid !important;
-    color: #0f172a !important;
-  }
-
-  /* 7. AI 命理深度報告鋪滿 A4 頁寬，優化字體大小與行高 */
-  .prose {
-    max-width: 100% !important;
-    font-size: 11pt !important;
-    line-height: 1.65 !important;
-    color: #1e293b !important;
-  }
-}
