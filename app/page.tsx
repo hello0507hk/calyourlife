@@ -16,6 +16,8 @@ import {
   Venus,
   WandSparkles,
   Calendar as CalendarIcon,
+  Printer,
+  FileDown,
 } from 'lucide-react';
 
 // 補足因 bazi.js 轉為純 JS 後缺少的型別定義
@@ -252,7 +254,7 @@ function BaziForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-full rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl sm:p-6 backdrop-blur">
+    <form onSubmit={handleSubmit} className="w-full max-w-full rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl sm:p-6 backdrop-blur print:hidden">
       <div className="mb-5 flex items-center gap-2">
         <span className="inline-flex size-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400">
           <User className="size-4" />
@@ -579,27 +581,55 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
     }
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
     <section className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-slate-900/90 p-5 shadow-xl sm:p-6">
-      <div className="relative flex flex-col gap-1">
-        <div className="flex items-center gap-1.5 text-amber-400">
-          <Sparkles className="size-4" />
-          <span className="text-xs font-medium tracking-widest uppercase">AI 命理分析</span>
+      <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1.5 text-amber-400">
+            <Sparkles className="size-4" />
+            <span className="text-xs font-medium tracking-widest uppercase">AI 命理分析</span>
+          </div>
+          <h2 className="font-serif text-lg font-medium text-slate-100">AI 命盤總結報告</h2>
+          <p className="text-xs text-slate-400 print:hidden">結合四柱、藏干、十神與大運走勢，由 DeepSeek + Qwen + Gemini 聯合會診生成個人化深度解讀。</p>
         </div>
-        <h2 className="font-serif text-lg font-medium text-slate-100">AI 命盤總結報告</h2>
-        <p className="text-xs text-slate-400">結合四柱、藏干、十神與大運走勢，由 DeepSeek 生成個人化深度解讀。</p>
+
+        {/* 列印與儲存 PDF 操作按鈕 */}
+        {report && (
+          <div className="flex items-center gap-2 print:hidden shrink-0">
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 active:scale-95"
+            >
+              <Printer className="size-3.5 text-slate-300" />
+              列印命書
+            </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-medium text-slate-950 transition-colors hover:bg-amber-400 active:scale-95 shadow-md"
+            >
+              <FileDown className="size-3.5 text-slate-950" />
+              儲存為 PDF
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="relative mt-4">
         {report ? (
           <div className="flex flex-col gap-3">
-            <Quote className="size-4 text-amber-500/60" />
-            <div className="prose prose-invert max-w-none text-sm leading-relaxed text-slate-200 whitespace-pre-line">
+            <Quote className="size-4 text-amber-500/60 print:hidden" />
+            <div className="prose prose-invert max-w-none text-sm leading-relaxed text-slate-200 whitespace-pre-line print:text-black print:prose-neutral">
               {report}
             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-800 bg-slate-950/60 px-4 py-8 text-center">
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-800 bg-slate-950/60 px-4 py-8 text-center print:hidden">
             <span className="inline-flex size-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-400">
               <WandSparkles className="size-4" />
             </span>
@@ -615,7 +645,7 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
         type="button"
         onClick={handleGenerate}
         disabled={loading}
-        className="relative mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm font-medium text-amber-300 transition-all hover:bg-amber-500/20 disabled:opacity-70"
+        className="relative mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm font-medium text-amber-300 transition-all hover:bg-amber-500/20 disabled:opacity-70 print:hidden"
       >
         <WandSparkles className="size-4 text-amber-400" />
         {loading ? 'AI 大師推演中…' : report ? '重新生成 AI 深度解盤' : '生成 AI 深度解盤'}
@@ -661,9 +691,9 @@ export default function Page() {
   const luck = baziData ? mapBaziToLuck(baziData.dayyun) : [];
 
   return (
-    <main className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-950 text-slate-100 selection:bg-amber-500/30 selection:text-amber-200">
+    <main className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-950 text-slate-100 selection:bg-amber-500/30 selection:text-amber-200 print:bg-white print:text-black">
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
-        <header className="mb-6 flex flex-col items-center gap-2 text-center">
+        <header className="mb-6 flex flex-col items-center gap-2 text-center print:hidden">
           <span className="inline-flex size-10 items-center justify-center rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
             <Compass className="size-5" />
           </span>
@@ -674,7 +704,7 @@ export default function Page() {
         </header>
 
         <div className="grid w-full min-w-0 gap-6 lg:grid-cols-[340px_1fr]">
-          <div className="w-full min-w-0 lg:sticky lg:top-6 lg:self-start">
+          <div className="w-full min-w-0 lg:sticky lg:top-6 lg:self-start print:hidden">
             <BaziForm onSubmit={handleFormSubmit} loading={loading} />
           </div>
 
@@ -686,7 +716,7 @@ export default function Page() {
                 <AiAnalysis baziData={baziData} userNotes={userNotes} />
               </div>
             ) : (
-              <div className="flex h-full min-h-[380px] w-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 px-6 py-12 text-center">
+              <div className="flex h-full min-h-[380px] w-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 px-6 py-12 text-center print:hidden">
                 <span className="inline-flex size-12 items-center justify-center rounded-full bg-slate-800 text-slate-500">
                   <Moon className="size-5" />
                 </span>
