@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { ADMIN_REFERENCE_DOCS } from '@/lib/adminKnowledge'; // 1. 引入管理員知識庫
+import { ADMIN_REFERENCE_DOCS } from '@/lib/adminKnowledge';
 
-// 雙 AI 協作需要執行兩次 API 呼叫，設定 300 秒 Vercel 超時限制
+// 延長 Vercel 超時限制至 300 秒（Vercel Pro 生效）
 export const maxDuration = 300;
 
-// 1. 自動計算天干五合（獨立函式）
+// 1. 自動計算天干五合
 function checkGanHe(gans: string[]) {
   const combinations = [
     { pair: ['甲', '己'], name: '甲己合化土' },
@@ -31,7 +31,7 @@ function checkGanHe(gans: string[]) {
   return uniqueFound.length > 0 ? uniqueFound.join('、') : '原局天干無五合組合';
 }
 
-// 2. 構建傳給 DeepSeek / Gemini / Qwen 的八字 Prompt 文字
+// 2. 構建傳給 AI 的八字 Prompt 文字
 function buildBaziText(baziData: any, userNotes?: string) {
   const { eightChar, dayGan, dayGanWuxing, wuxingCounts, dayyun, solarDate, lunarDate, gender, genderText } = baziData;
 
@@ -108,7 +108,8 @@ export async function POST(req: Request) {
     const { baziData, userNotes } = await req.json();
 
     const deepseekKey = process.env.DEEPSEEK_API_KEY;
-    const qwenKey = process.env.QWEN_API_KEY || process.env.OPENROUTER_API_KEY;
+    const dashscopeKey = process.env.QWEN_API_KEY;
+    const openrouterKey = process.env.OPENROUTER_API_KEY;
     const geminiKey = process.env.GEMINI_API_KEY;
 
     if (!deepseekKey) {
@@ -198,44 +199,72 @@ ${ADMIN_REFERENCE_DOCS}
           { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
         ],
       }),
-    }).then(res => res.ok ? res.json() : null).catch(() => null);
+    }).then(async (res) => {
+      if (!res.ok) {
+        console.error('❌ DeepSeek 呼叫失敗:', res.status, await res.text());
+        return null;
+      }
+      return res.json();
+    }).catch((err) => {
+      console.error('❌ DeepSeek 網路發送異常:', err);
+      return null;
+    });
 
-    // 1.2 Qwen (通義千問) 請求
-    const qwenPromise = qwenKey ? (
-      process.env.OPENROUTER_API_KEY ? 
-        fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${qwenKey}`,
-          },
-          body: JSON.stringify({
-            model: 'qwen/qwen-2.5-72b-instruct',
-            temperature: 0.0,
-            messages: [
-              { role: 'system', content: initialSystemPrompt },
-              { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
-            ],
-          }),
-        }) : 
-        fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${qwenKey}`,
-          },
-          body: JSON.stringify({
-            model: 'qwen-max',
-            temperature: 0.0,
-            messages: [
-              { role: 'system', content: initialSystemPrompt },
-              { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
-            ],
-          }),
-        })
-    ).then(res => res.ok ? res.json() : null).catch(() => null) : Promise.resolve(null);
+    // 1.2 Qwen (通義千問) 請求判斷 (優先使用 OpenRouter，其次使用 DashScope)
+    let qwenPromise: Promise<any> = Promise.resolve(null);
 
-    // 同時等待 DeepSeek 與 Qwen
+    if (openrouterKey) {
+      qwenPromise = fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${openrouterKey}`,
+        },
+        body: JSON.stringify({
+          model: 'qwen/qwen-2.5-72b-instruct',
+          temperature: 0.0,
+          messages: [
+            { role: 'system', content: initialSystemPrompt },
+            { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
+          ],
+        }),
+      }).then(async (res) => {
+        if (!res.ok) {
+          console.error('❌ Qwen (via OpenRouter) 呼叫失敗:', res.status, await res.text());
+          return null;
+        }
+        return res.json();
+      }).catch((err) => {
+        console.error('❌ Qwen (OpenRouter) 網路異常:', err);
+        return null;
+      });
+    } else if (dashscopeKey) {
+      qwenPromise = fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${dashscopeKey}`,
+        },
+        body: JSON.stringify({
+          model: 'qwen-max',
+          temperature: 0.0,
+          messages: [
+            { role: 'system', content: initialSystemPrompt },
+            { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
+          ],
+        }),
+      }).then(async (res) => {
+        if (!res.ok) {
+          console.error('❌ Qwen (via DashScope) 呼叫失敗:', res.status, await res.text());
+          return null;
+        }
+        return res.json();
+      }).catch((err) => {
+        console.error('❌ Qwen (DashScope) 網路異常:', err);
+        return null;
+      });
+    }
+
     const [deepseekData, qwenData] = await Promise.all([deepseekPromise, qwenPromise]);
 
     const draftDeepseek = deepseekData?.choices?.[0]?.message?.content || '';
@@ -280,31 +309,45 @@ ${draftQwen || '（Qwen 未回應）'}
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: geminiPrompt }] }],
+            // 關鍵：允許命理古籍敏感詞（死、夭、殺、傷）通過審查
+            safetySettings: [
+              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+            ],
             generationConfig: { temperature: 0.2 },
           }),
         });
 
-        if (geminiResponse.ok) {
+        if (!geminiResponse.ok) {
+          const errBody = await geminiResponse.text();
+          console.error(`❌ Gemini API 請求失敗 [HTTP ${geminiResponse.status}]:`, errBody);
+        } else {
           const geminiData = await geminiResponse.json();
-          const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+          const candidate = geminiData.candidates?.[0];
+          
+          if (candidate?.finishReason && candidate.finishReason !== 'STOP') {
+            console.warn('⚠️ Gemini 終止原因非 STOP:', candidate.finishReason);
+          }
+
+          const text = candidate?.content?.parts?.[0]?.text;
           if (text && text.trim() !== '') {
             finalReport = text;
             geminiUsed = true;
+          } else {
+            console.warn('⚠️ Gemini 回傳空內容，完整 Payload:', JSON.stringify(geminiData));
           }
         }
       } catch (gErr) {
-        console.warn('Gemini 審閱連線異常，自動降級:', gErr);
+        console.error('❌ Gemini 網路請求異常:', gErr);
       }
     }
 
-    // 若 Gemini 呼叫失敗或未設定，降級回傳成功產出的初批結果
     if (!finalReport) {
       finalReport = draftDeepseek || draftQwen || '未取得分析結果';
     }
 
-    // ==================================================================
-    // 三 AI 狀態控制台 Log 輸出（可以在 Vercel Logs 中直接查看）
-    // ==================================================================
     console.log('--------------------------------------------------');
     console.log('【三 AI 聯合會診調用狀態總覽】：');
     console.log(`1. DeepSeek 初批 ： ${draftDeepseek ? '✅ 成功回應' : '❌ 失敗 / 未調用'}`);
