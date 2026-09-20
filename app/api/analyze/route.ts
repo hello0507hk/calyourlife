@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { ADMIN_REFERENCE_DOCS } from '@/lib/adminKnowledge'; // 1. 引入管理員知識庫
 
-// 雙 AI 協作需要執行兩次 API 呼叫，設定 60 秒 Vercel 超時限制
-export const maxDuration = 60;
+// 雙 AI 協作需要執行兩次 API 呼叫，設定 300 秒 Vercel 超時限制
+export const maxDuration = 300;
 
 // 1. 自動計算天干五合（獨立函式）
 function checkGanHe(gans: string[]) {
