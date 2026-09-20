@@ -301,46 +301,43 @@ ${draftQwen || '（Qwen 未回應）'}
 --------------------------------------------------
 `.trim();
 
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
+      // 最新 Gemini 模型優先列表（自動降級備用）
+      const candidateModels = ['gemini-2.5-flash', 'gemini-1.5-flash'];
 
-      try {
-        const geminiResponse = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: geminiPrompt }] }],
-            // 關鍵：允許命理古籍敏感詞（死、夭、殺、傷）通過審查
-            safetySettings: [
-              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-            ],
-            generationConfig: { temperature: 0.2 },
-          }),
-        });
+      for (const model of candidateModels) {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
 
-        if (!geminiResponse.ok) {
-          const errBody = await geminiResponse.text();
-          console.error(`❌ Gemini API 請求失敗 [HTTP ${geminiResponse.status}]:`, errBody);
-        } else {
-          const geminiData = await geminiResponse.json();
-          const candidate = geminiData.candidates?.[0];
-          
-          if (candidate?.finishReason && candidate.finishReason !== 'STOP') {
-            console.warn('⚠️ Gemini 終止原因非 STOP:', candidate.finishReason);
-          }
+        try {
+          const geminiResponse = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: geminiPrompt }] }],
+              safetySettings: [
+                { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+              ],
+              generationConfig: { temperature: 0.2 },
+            }),
+          });
 
-          const text = candidate?.content?.parts?.[0]?.text;
-          if (text && text.trim() !== '') {
-            finalReport = text;
-            geminiUsed = true;
+          if (geminiResponse.ok) {
+            const geminiData = await geminiResponse.json();
+            const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text && text.trim() !== '') {
+              finalReport = text;
+              geminiUsed = true;
+              console.log(`✅ Gemini 大師總審閱成功！使用最新模型: ${model}`);
+              break; // 成功即跳出迴圈
+            }
           } else {
-            console.warn('⚠️ Gemini 回傳空內容，完整 Payload:', JSON.stringify(geminiData));
+            console.warn(`⚠️ Gemini 模型 [${model}] 呼叫 HTTP ${geminiResponse.status}:`, await geminiResponse.text());
           }
+        } catch (gErr) {
+          console.error(`❌ Gemini 模型 [${model}] 請求例外:`, gErr);
         }
-      } catch (gErr) {
-        console.error('❌ Gemini 網路請求異常:', gErr);
       }
     }
 
