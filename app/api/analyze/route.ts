@@ -111,6 +111,7 @@ export async function POST(req: Request) {
     const dashscopeKey = process.env.QWEN_API_KEY;
     const openrouterKey = process.env.OPENROUTER_API_KEY;
     const geminiKey = process.env.GEMINI_API_KEY;
+    const openaiKey = process.env.OPENAI_API_KEY;
 
     if (!deepseekKey) {
       return NextResponse.json(
@@ -180,7 +181,7 @@ ${ADMIN_REFERENCE_DOCS}
 語氣請保持客觀、理性且富有建設性，避免過度武斷或誇大災禍。`;
 
     // ==================================================================
-    // 第一階段：DeepSeek 與 Qwen 平行同步進行初批 (Promise.all)
+    // 第一階段：DeepSeek + Qwen + Gemini 三 AI 平行同步初批 (Promise.all)
     // ==================================================================
 
     // 1.1 DeepSeek 請求
@@ -253,34 +254,51 @@ ${ADMIN_REFERENCE_DOCS}
             { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
           ],
         }),
-      }).then(async (res) => {
-        if (!res.ok) {
-          console.error('❌ Qwen (via DashScope) 呼叫失敗:', res.status, await res.text());
-          return null;
-        }
-        return res.json();
-      }).catch((err) => {
-        console.error('❌ Qwen (DashScope) 網路異常:', err);
-        return null;
-      });
+      }).then(async (res) => (res.ok ? res.json() : null)).catch(() => null);
     }
 
-    const [deepseekData, qwenData] = await Promise.all([deepseekPromise, qwenPromise]);
+    // 1.3 Gemini 初批 (gemini-3.8-flash)
+    let geminiPromise: Promise<any> = Promise.resolve(null);
+    if (geminiKey) {
+      const cleanGeminiKey = geminiKey.trim();
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${cleanGeminiKey}`;
+
+      geminiPromise = fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${initialSystemPrompt}\n\n請幫我分析以下八字命盤數據：\n\n${formattedText}` }] }],
+          safetySettings: [
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+          ],
+          generationConfig: { temperature: 0.0 },
+        }),
+      }).then(async (res) => (res.ok ? res.json() : null)).catch(() => null);
+    }
+
+    const [deepseekData, qwenData, geminiData] = await Promise.all([
+      deepseekPromise,
+      qwenPromise,
+      geminiPromise,
+    ]);
 
     const draftDeepseek = deepseekData?.choices?.[0]?.message?.content || '';
     const draftQwen = qwenData?.choices?.[0]?.message?.content || '';
+    const draftGemini = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
     // ==================================================================
-    // 第二階段：Gemini 進行「大師總審閱」與最終批命報告裁決
+    // 第二階段：ChatGPT (GPT-4o) 終極大師總審閱
     // ==================================================================
     let finalReport = '';
-    let geminiUsed = false;
+    let chatgptUsed = false;
 
-    if (geminiKey) {
-      const cleanGeminiKey = geminiKey.trim();
-      const geminiPrompt = `
+    if (openaiKey) {
+      const chatgptPrompt = `
 你是一位權威八字命理總審閱官，精通子平八字、《滴天髓徵義》、《造化元鑰》、《子平一得》、神峰通考和命理師指定的內部參考法則。
-以下是由兩位命理 AI（DeepSeek 與 Qwen 通義千問）對同一八字進行的初批草稿。
+以下是由三位命理 AI（DeepSeek、Qwen 通義千問與 Google Gemini）對同一八字進行的初批草稿。
 
 【審閱與嚴格修正要求】：
 1. 嚴格對照【原八字排盤數據】與【內部參考規範】，對比 DeepSeek 與 Qwen 對於「用神、格局、病藥、喜忌」的判定。若兩者一致則採納；若有分歧，必須依據《造化元鑰》十干月令喜忌與《子平一得》為唯一標準進行裁決，確定唯一的格局與用神，嚴禁出現矛盾，用神不等於調候用神。
@@ -306,57 +324,56 @@ ${draftDeepseek || '（DeepSeek 未回應）'}
 
 【初批草稿二 (Qwen 通義千問)】：
 ${draftQwen || '（Qwen 未回應）'}
+
+【初批草稿三 (Google Gemini)】：
+${draftGemini || '（未回應）'}
 --------------------------------------------------
 `.trim();
 
-      // 使用 Google AI Studio 官方最穩定的標準端點
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${cleanGeminiKey}`;
-
       try {
-        const geminiResponse = await fetch(geminiUrl, {
+        const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${openaiKey.trim()}`,
+          },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: geminiPrompt }] }],
-            // 允許命理術語（如：死、夭、殺、傷）通過安全審核
-            safetySettings: [
-              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+            model: 'gpt-4o',
+            temperature: 0.2,
+            messages: [
+              { role: 'system', content: '你是一位權威八字命理總審閱官，負責對多模型命理分析報告進行審閱與統合。' },
+              { role: 'user', content: chatgptPrompt },
             ],
-            generationConfig: { temperature: 0.2 },
           }),
         });
 
-        if (geminiResponse.ok) {
-          const geminiData = await geminiResponse.json();
-          const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (openaiResponse.ok) {
+          const resData = await openaiResponse.json();
+          const text = resData.choices?.[0]?.message?.content;
           if (text && text.trim() !== '') {
             finalReport = text;
-            geminiUsed = true;
-            console.log('✅ Gemini 大師總審閱成功回應！');
-          } else {
-            console.warn('⚠️ Gemini 回傳空內容:', JSON.stringify(geminiData));
+            chatgptUsed = true;
+            console.log('✅ ChatGPT (GPT-4o) 終極總審閱成功回應！');
           }
         } else {
-          const errorErr = await geminiResponse.text();
-          console.error(`❌ Gemini API 失敗 [HTTP ${geminiResponse.status}]:`, errorErr);
+          console.error(`❌ ChatGPT API 失敗 [HTTP ${openaiResponse.status}]:`, await openaiResponse.text());
         }
-      } catch (gErr) {
-        console.error('❌ Gemini 網路連線異常:', gErr);
+      } catch (err) {
+        console.error('❌ ChatGPT 網路連線異常:', err);
       }
     }
 
+    // 若 ChatGPT 呼叫失敗或未設定 OpenAI Key，自動安全降級
     if (!finalReport) {
-      finalReport = draftDeepseek || draftQwen || '未取得分析結果';
+      finalReport = draftDeepseek || draftQwen || draftGemini || '未取得分析結果';
     }
 
     console.log('--------------------------------------------------');
-    console.log('【三 AI 聯合會診調用狀態總覽】：');
-    console.log(`1. DeepSeek 初批 ： ${draftDeepseek ? '✅ 成功回應' : '❌ 失敗 / 未調用'}`);
-    console.log(`2. Qwen (千問) 初批 ： ${draftQwen ? '✅ 成功回應' : '❌ 失敗 / 未設定 Key'}`);
-    console.log(`3. Gemini 總審閱  ： ${geminiUsed ? '✅ 成功稽核' : '❌ 失敗 / 降級輸出'}`);
+    console.log('【四 AI 聯合會診調用狀態總覽】：');
+    console.log(`1. DeepSeek 初批 ： ${draftDeepseek ? '✅ 成功回應' : '❌ 失敗'}`);
+    console.log(`2. Qwen 初批     ： ${draftQwen ? '✅ 成功回應' : '❌ 失敗'}`);
+    console.log(`3. Gemini 初批   ： ${draftGemini ? '✅ 成功回應' : '❌ 失敗'}`);
+    console.log(`4. ChatGPT 總審閱 ： ${chatgptUsed ? '✅ 成功稽核' : '❌ 失敗 / 降級輸出'}`);
     console.log('--------------------------------------------------');
 
     return NextResponse.json({
@@ -364,7 +381,8 @@ ${draftQwen || '（Qwen 未回應）'}
       meta: {
         deepseekUsed: !!draftDeepseek,
         qwenUsed: !!draftQwen,
-        geminiUsed: geminiUsed,
+        geminiUsed: !!draftGemini,
+        chatgptUsed: chatgptUsed,
       },
     });
 
