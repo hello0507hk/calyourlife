@@ -111,7 +111,6 @@ export async function POST(req: Request) {
     const dashscopeKey = process.env.QWEN_API_KEY;
     const openrouterKey = process.env.OPENROUTER_API_KEY;
     const geminiKey = process.env.GEMINI_API_KEY;
-    const openaiKey = process.env.OPENAI_API_KEY;
 
     if (!deepseekKey) {
       return NextResponse.json(
@@ -189,7 +188,7 @@ ${ADMIN_REFERENCE_DOCS}
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${deepseekKey}`,
+        Authorization: `Bearer ${deepseekKey.trim()}`,
       },
       body: JSON.stringify({
         model: 'deepseek-chat',
@@ -211,15 +210,14 @@ ${ADMIN_REFERENCE_DOCS}
       return null;
     });
 
-    // 1.2 Qwen (通義千問) 請求判斷 (優先使用 OpenRouter，其次使用 DashScope)
+    // 1.2 Qwen 請求 (優先使用 OpenRouter，其次 DashScope)
     let qwenPromise: Promise<any> = Promise.resolve(null);
-
     if (openrouterKey) {
       qwenPromise = fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${openrouterKey}`,
+          Authorization: `Bearer ${openrouterKey.trim()}`,
         },
         body: JSON.stringify({
           model: 'qwen/qwen-2.5-72b-instruct',
@@ -231,7 +229,7 @@ ${ADMIN_REFERENCE_DOCS}
         }),
       }).then(async (res) => {
         if (!res.ok) {
-          console.error('❌ Qwen (via OpenRouter) 呼叫失敗:', res.status, await res.text());
+          console.error('❌ Qwen (OpenRouter) 呼叫失敗:', res.status, await res.text());
           return null;
         }
         return res.json();
@@ -244,7 +242,7 @@ ${ADMIN_REFERENCE_DOCS}
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${dashscopeKey}`,
+          Authorization: `Bearer ${dashscopeKey.trim()}`,
         },
         body: JSON.stringify({
           model: 'qwen-max',
@@ -257,11 +255,11 @@ ${ADMIN_REFERENCE_DOCS}
       }).then(async (res) => (res.ok ? res.json() : null)).catch(() => null);
     }
 
-    // 1.3 Gemini 初批 (gemini-3.8-flash)
+    // 1.3 Gemini 初批 (使用 gemini-1.5-flash 端點，關閉安全過濾)
     let geminiPromise: Promise<any> = Promise.resolve(null);
     if (geminiKey) {
       const cleanGeminiKey = geminiKey.trim();
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${cleanGeminiKey}`;
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${cleanGeminiKey}`;
 
       geminiPromise = fetch(geminiUrl, {
         method: 'POST',
@@ -276,9 +274,13 @@ ${ADMIN_REFERENCE_DOCS}
           ],
           generationConfig: { temperature: 0.0 },
         }),
-      }).then(async (res) => (res.ok ? res.json() : null)).catch(() => null);
+      }).then(async (res) => (res.ok ? res.json() : null)).catch((err) => {
+        console.error('❌ Gemini 網路發送異常:', err);
+        return null;
+      });
     }
 
+    // 三模型平行同時執行
     const [deepseekData, qwenData, geminiData] = await Promise.all([
       deepseekPromise,
       qwenPromise,
@@ -290,12 +292,12 @@ ${ADMIN_REFERENCE_DOCS}
     const draftGemini = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
     // ==================================================================
-    // 第二階段：ChatGPT (GPT-4o) 終極大師總審閱
+    // 第二階段：經由 OpenRouter 調用 ChatGPT (openai/gpt-4o) 進行終極總審閱
     // ==================================================================
     let finalReport = '';
     let chatgptUsed = false;
 
-    if (openaiKey) {
+    if (openrouterKey) {
       const chatgptPrompt = `
 你是一位權威八字命理總審閱官，精通子平八字、《滴天髓徵義》、《造化元鑰》、《子平一得》、神峰通考和命理師指定的內部參考法則。
 以下是由三位命理 AI（DeepSeek、Qwen 通義千問與 Google Gemini）對同一八字進行的初批草稿。
@@ -307,13 +309,13 @@ ${ADMIN_REFERENCE_DOCS}
 4. 檢查「格局」與「用神」是否唯一，嚴禁同時出現兩種矛盾格局判定。
 5. 出身、事業、感情和健康須要更專業、更詳盡解釋每個可能性給命主知道，如初級報告沒有提及或有遺漏，需要修改和補註。
 6. 請完全保留「六大章節 (### 一、至 ### 六、)」Markdown 格式輸出。
-7. 排盤後，原局八字的天干和地支本氣有殺星，必須嚴格遵從有殺先論殺的所有規定，有殺先論殺凌駕所有法則，傷官當令除外
-8. 批斷時必定要遵從所有內部參考法則
-9. 地支除本氣和月令藏元外，其他一律不可以做用神
-10.收列初批草稿後，必須先嚴格審查所有批斷是否嚴格遵從所有列出的規則，如沒有就是修改及補註
-11.必須清楚判斷用神，忌神，和藥神，不容任何錯誤，用神是原局中有用之神，忌神是尅用神之神，藥神是醫病之神
-12.食神制殺格和傷官架殺格不能見印星，食神制殺若逢梟，非貧即夭，殺印相生格不能見財星，因為儲財破印
-13.有殺先論殺第一步必須先比較日元和殺的強弱，比較方法可直接對比八字裡的數量，是殺多還是日元比劫多，是否當令，有沒有長生和庫等因素，殺星有沒有根，有沒有透出，有沒有被制化，有沒有被合化，有沒有被沖合等
+7. 排盤後，原局八字的天干和地支本氣有殺星，必須嚴格遵從有殺先論殺的所有規定，有殺先論殺凌駕所有法則，傷官當令除外。
+8. 批斷時必定要遵從所有內部參考法則。
+9. 地支除本氣和月令藏元外，其他一律不可以做用神。
+10. 收列初批草稿後，必須先嚴格審查所有批斷是否嚴格遵從所有列出的規則，如沒有就是修改及補註。
+11. 必須清楚判斷用神，忌神，和藥神，不容任何錯誤，用神是原局中有用之神，忌神是尅用神之神，藥神是醫病之神。
+12. 食神制殺格和傷官架殺格不能見印星，食神制殺若逢梟，非貧即夭，殺印相生格不能見財星，因為儲財破印。
+13. 有殺先論殺第一步必須先比較日元和殺的強弱，比較方法可直接對比八字裡的數量，是殺多還是日元比劫多，是否當令，有沒有長生和庫等因素，殺星有沒有根，有沒有透出，有沒有被制化，有沒有被合化，有沒有被沖合等。
 
 --------------------------------------------------
 【原八字排盤數據與內部規範】：
@@ -326,19 +328,21 @@ ${draftDeepseek || '（DeepSeek 未回應）'}
 ${draftQwen || '（Qwen 未回應）'}
 
 【初批草稿三 (Google Gemini)】：
-${draftGemini || '（未回應）'}
+${draftGemini || '（Google Gemini 未回應）'}
 --------------------------------------------------
 `.trim();
 
       try {
-        const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        const openrouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${openaiKey.trim()}`,
+            Authorization: `Bearer ${openrouterKey.trim()}`,
+            'HTTP-Referer': 'https://bazi-app.vercel.app',
+            'X-Title': 'Bazi Multi-AI Reviewer',
           },
           body: JSON.stringify({
-            model: 'gpt-4o',
+            model: 'openai/gpt-4o', // 經 OpenRouter 調用 ChatGPT GPT-4o
             temperature: 0.2,
             messages: [
               { role: 'system', content: '你是一位權威八字命理總審閱官，負責對多模型命理分析報告進行審閱與統合。' },
@@ -347,33 +351,33 @@ ${draftGemini || '（未回應）'}
           }),
         });
 
-        if (openaiResponse.ok) {
-          const resData = await openaiResponse.json();
+        if (openrouterResponse.ok) {
+          const resData = await openrouterResponse.json();
           const text = resData.choices?.[0]?.message?.content;
           if (text && text.trim() !== '') {
             finalReport = text;
             chatgptUsed = true;
-            console.log('✅ ChatGPT (GPT-4o) 終極總審閱成功回應！');
+            console.log('✅ OpenRouter ChatGPT (openai/gpt-4o) 終極總審閱成功回應！');
           }
         } else {
-          console.error(`❌ ChatGPT API 失敗 [HTTP ${openaiResponse.status}]:`, await openaiResponse.text());
+          console.error(`❌ OpenRouter ChatGPT API 失敗 [HTTP ${openrouterResponse.status}]:`, await openrouterResponse.text());
         }
       } catch (err) {
-        console.error('❌ ChatGPT 網路連線異常:', err);
+        console.error('❌ OpenRouter ChatGPT 網路連線異常:', err);
       }
     }
 
-    // 若 ChatGPT 呼叫失敗或未設定 OpenAI Key，自動安全降級
+    // 若 OpenRouter 審閱失敗或未設定 Key，自動降級輸出
     if (!finalReport) {
       finalReport = draftDeepseek || draftQwen || draftGemini || '未取得分析結果';
     }
 
     console.log('--------------------------------------------------');
     console.log('【四 AI 聯合會診調用狀態總覽】：');
-    console.log(`1. DeepSeek 初批 ： ${draftDeepseek ? '✅ 成功回應' : '❌ 失敗'}`);
-    console.log(`2. Qwen 初批     ： ${draftQwen ? '✅ 成功回應' : '❌ 失敗'}`);
-    console.log(`3. Gemini 初批   ： ${draftGemini ? '✅ 成功回應' : '❌ 失敗'}`);
-    console.log(`4. ChatGPT 總審閱 ： ${chatgptUsed ? '✅ 成功稽核' : '❌ 失敗 / 降級輸出'}`);
+    console.log(`1. DeepSeek 初批           ： ${draftDeepseek ? '✅ 成功回應' : '❌ 失敗'}`);
+    console.log(`2. Qwen 初批               ： ${draftQwen ? '✅ 成功回應' : '❌ 失敗'}`);
+    console.log(`3. Gemini 初批             ： ${draftGemini ? '✅ 成功回應' : '❌ 失敗'}`);
+    console.log(`4. OpenRouter GPT-4o 總審閱 ： ${chatgptUsed ? '✅ 成功稽核' : '❌ 失敗 / 降級輸出'}`);
     console.log('--------------------------------------------------');
 
     return NextResponse.json({
