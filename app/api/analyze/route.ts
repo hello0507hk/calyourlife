@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ADMIN_REFERENCE_DOCS } from '@/lib/adminKnowledge';
 
-// 延長 Vercel 超時限制至 300 秒（Vercel Pro 生效）
+// 延長 Vercel 超時限制至 300 秒（須 Vercel Pro 帳號生效）
 export const maxDuration = 300;
 
 // 1. 自動計算天干五合
@@ -104,13 +104,15 @@ ${dayyun.map((d: any) => `- ${d.age}歲起大運：${d.ganZhi}`).join('\n')}
 
 // 3. API Route 主入口
 export async function POST(req: Request) {
+  const executionErrors: Record<string, string> = {};
+
   try {
     const { baziData, userNotes } = await req.json();
 
-    const deepseekKey = process.env.DEEPSEEK_API_KEY;
-    const dashscopeKey = process.env.QWEN_API_KEY;
-    const openrouterKey = process.env.OPENROUTER_API_KEY;
-    const geminiKey = process.env.GEMINI_API_KEY;
+    const deepseekKey = process.env.DEEPSEEK_API_KEY?.trim();
+    const dashscopeKey = process.env.QWEN_API_KEY?.trim();
+    const openrouterKey = process.env.OPENROUTER_API_KEY?.trim();
+    const geminiKey = process.env.GEMINI_API_KEY?.trim();
 
     if (!deepseekKey) {
       return NextResponse.json(
@@ -188,7 +190,7 @@ ${ADMIN_REFERENCE_DOCS}
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${deepseekKey.trim()}`,
+        Authorization: `Bearer ${deepseekKey}`,
       },
       body: JSON.stringify({
         model: 'deepseek-chat',
@@ -201,23 +203,26 @@ ${ADMIN_REFERENCE_DOCS}
       }),
     }).then(async (res) => {
       if (!res.ok) {
-        console.error('❌ DeepSeek 呼叫失敗:', res.status, await res.text());
+        const err = await res.text();
+        executionErrors['DeepSeek'] = `HTTP ${res.status}: ${err}`;
+        console.error('❌ DeepSeek 呼叫失敗:', res.status, err);
         return null;
       }
       return res.json();
     }).catch((err) => {
+      executionErrors['DeepSeek'] = `網路異常: ${err.message}`;
       console.error('❌ DeepSeek 網路發送異常:', err);
       return null;
     });
 
-    // 1.2 Qwen 請求 (優先使用 OpenRouter，其次 DashScope)
+    // 1.2 Qwen (通義千問) 請求
     let qwenPromise: Promise<any> = Promise.resolve(null);
     if (openrouterKey) {
       qwenPromise = fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${openrouterKey.trim()}`,
+          Authorization: `Bearer ${openrouterKey}`,
         },
         body: JSON.stringify({
           model: 'qwen/qwen-2.5-72b-instruct',
@@ -229,12 +234,14 @@ ${ADMIN_REFERENCE_DOCS}
         }),
       }).then(async (res) => {
         if (!res.ok) {
-          console.error('❌ Qwen (OpenRouter) 呼叫失敗:', res.status, await res.text());
+          const err = await res.text();
+          executionErrors['Qwen(OpenRouter)'] = `HTTP ${res.status}: ${err}`;
+          console.error('❌ Qwen (OpenRouter) 呼叫失敗:', res.status, err);
           return null;
         }
         return res.json();
       }).catch((err) => {
-        console.error('❌ Qwen (OpenRouter) 網路異常:', err);
+        executionErrors['Qwen(OpenRouter)'] = `網路異常: ${err.message}`;
         return null;
       });
     } else if (dashscopeKey) {
@@ -242,7 +249,7 @@ ${ADMIN_REFERENCE_DOCS}
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${dashscopeKey.trim()}`,
+          Authorization: `Bearer ${dashscopeKey}`,
         },
         body: JSON.stringify({
           model: 'qwen-max',
@@ -252,14 +259,25 @@ ${ADMIN_REFERENCE_DOCS}
             { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
           ],
         }),
-      }).then(async (res) => (res.ok ? res.json() : null)).catch(() => null);
+      }).then(async (res) => {
+        if (!res.ok) {
+          const err = await res.text();
+          executionErrors['Qwen(DashScope)'] = `HTTP ${res.status}: ${err}`;
+          return null;
+        }
+        return res.json();
+      }).catch((err) => {
+        executionErrors['Qwen(DashScope)'] = `網路異常: ${err.message}`;
+        return null;
+      });
+    } else {
+      executionErrors['Qwen'] = '未設定 QWEN_API_KEY 或 OPENROUTER_API_KEY';
     }
 
     // 1.3 Gemini 初批 (使用 gemini-1.5-flash 端點，關閉安全過濾)
     let geminiPromise: Promise<any> = Promise.resolve(null);
     if (geminiKey) {
-      const cleanGeminiKey = geminiKey.trim();
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${cleanGeminiKey}`;
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
 
       geminiPromise = fetch(geminiUrl, {
         method: 'POST',
@@ -274,10 +292,20 @@ ${ADMIN_REFERENCE_DOCS}
           ],
           generationConfig: { temperature: 0.0 },
         }),
-      }).then(async (res) => (res.ok ? res.json() : null)).catch((err) => {
-        console.error('❌ Gemini 網路發送異常:', err);
+      }).then(async (res) => {
+        if (!res.ok) {
+          const err = await res.text();
+          executionErrors['Gemini'] = `HTTP ${res.status}: ${err}`;
+          console.error('❌ Gemini 呼叫失敗:', res.status, err);
+          return null;
+        }
+        return res.json();
+      }).catch((err) => {
+        executionErrors['Gemini'] = `網路異常: ${err.message}`;
         return null;
       });
+    } else {
+      executionErrors['Gemini'] = '未設定 GEMINI_API_KEY';
     }
 
     // 三模型平行同時執行
@@ -303,7 +331,7 @@ ${ADMIN_REFERENCE_DOCS}
 以下是由三位命理 AI（DeepSeek、Qwen 通義千問與 Google Gemini）對同一八字進行的初批草稿。
 
 【審閱與嚴格修正要求】：
-1. 嚴格對照【原八字排盤數據】與【內部參考規範】，對比 DeepSeek 與 Qwen 對於「用神、格局、病藥、喜忌」的判定。若兩者一致則採納；若有分歧，必須依據《造化元鑰》十干月令喜忌與《子平一得》為唯一標準進行裁決，確定唯一的格局與用神，嚴禁出現矛盾，用神不等於調候用神。
+1. 嚴格對照【原八字排盤數據】與【內部參考規範】，對比 DeepSeek、Qwen 與 Gemini 對於「用神、格局、病藥、喜忌」的判定。若有分歧，必須依據《造化元鑰》十干月令喜忌與《子平一得》為唯一標準進行裁決，確定唯一的格局與用神，嚴禁出現前後矛盾，用神不等於調候用神。
 2. 檢查初批報告有無「十神生剋錯誤」、「天干合化誤判」或「前後喜用神不一致」等邏輯矛盾，在批斷大運和流年吉凶等事情，是否有所遺漏錯誤，如有，應作出補註或修改。
 3. 確保第四部分感情婚姻分析 100% 符合命主的實際性別（男命論妻、女命論夫），完全刪除任何「假設命主為男/女」等不確定字眼。
 4. 檢查「格局」與「用神」是否唯一，嚴禁同時出現兩種矛盾格局判定。
@@ -337,7 +365,7 @@ ${draftGemini || '（Google Gemini 未回應）'}
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${openrouterKey.trim()}`,
+            Authorization: `Bearer ${openrouterKey}`,
             'HTTP-Referer': 'https://bazi-app.vercel.app',
             'X-Title': 'Bazi Multi-AI Reviewer',
           },
@@ -360,16 +388,21 @@ ${draftGemini || '（Google Gemini 未回應）'}
             console.log('✅ OpenRouter ChatGPT (openai/gpt-4o) 終極總審閱成功回應！');
           }
         } else {
-          console.error(`❌ OpenRouter ChatGPT API 失敗 [HTTP ${openrouterResponse.status}]:`, await openrouterResponse.text());
+          const err = await openrouterResponse.text();
+          executionErrors['OpenRouter_GPT4o'] = `HTTP ${openrouterResponse.status}: ${err}`;
+          console.error(`❌ OpenRouter ChatGPT API 失敗 [HTTP ${openrouterResponse.status}]:`, err);
         }
-      } catch (err) {
+      } catch (err: any) {
+        executionErrors['OpenRouter_GPT4o'] = `網路異常: ${err.message}`;
         console.error('❌ OpenRouter ChatGPT 網路連線異常:', err);
       }
+    } else {
+      executionErrors['OpenRouter_GPT4o'] = '未設定 OPENROUTER_API_KEY';
     }
 
     // 若 OpenRouter 審閱失敗或未設定 Key，自動降級輸出
     if (!finalReport) {
-      finalReport = draftDeepseek || draftQwen || draftGemini || '未取得分析結果';
+      finalReport = draftDeepseek || draftQwen || draftGemini || '未取得分析結果，請檢視 API 金鑰與點數設定。';
     }
 
     console.log('--------------------------------------------------');
@@ -387,13 +420,14 @@ ${draftGemini || '（Google Gemini 未回應）'}
         qwenUsed: !!draftQwen,
         geminiUsed: !!draftGemini,
         chatgptUsed: chatgptUsed,
+        errors: executionErrors,
       },
     });
 
   } catch (error: any) {
     console.error('伺服器處理異常:', error);
     return NextResponse.json(
-      { error: error.message || '伺服器內部錯誤' },
+      { error: error.message || '伺服器內部錯誤', details: executionErrors },
       { status: 500 }
     );
   }
