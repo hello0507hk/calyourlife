@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ADMIN_REFERENCE_DOCS } from '@/lib/adminKnowledge';
 
-// 1. 強制每次請求皆動態獲取環境變數，防止 Next.js 快取 process.env
+// 1. 強制動態獲取環境變數，禁止靜態快取
 export const dynamic = 'force-dynamic';
 
 // 2. 延長 Vercel 超時限制至 300 秒（Vercel Pro 帳號生效）
@@ -124,14 +124,6 @@ export async function POST(req: Request) {
     )?.trim();
 
     const geminiKey = process.env.GEMINI_API_KEY?.trim();
-
-    // 後端即時偵測 Console 日誌
-    console.log('🔍 [API Env Verification]', {
-      DeepSeek: !!deepseekKey,
-      Qwen: !!dashscopeKey || !!openrouterKey,
-      xAI: !!xaiKey,
-      Gemini: !!geminiKey,
-    });
 
     if (!deepseekKey) {
       return NextResponse.json(
@@ -274,13 +266,13 @@ ${ADMIN_REFERENCE_DOCS}
       executionErrors['Qwen'] = '未設定 QWEN_API_KEY 或 OPENROUTER_API_KEY';
     }
 
-    // 1.3 Grok 初批 (採用直連 + 順序自動退回)
+    // 1.3 Grok 初批 (改用 xAI 現行標準模型 ID: grok-2 與 grok-3)
     let grokPromise: Promise<any> = Promise.resolve(null);
     if (xaiKey) {
       grokPromise = (async () => {
-        // xAI 官方標準模型名稱順序
-        const candidateModels = ['grok-2-latest', 'grok-2-1212', 'grok-beta'];
-        for (const modelName of candidateModels) {
+        // 更新為 xAI 當前活躍的模型 ID
+        const activeModels = ['grok-2', 'grok-3', 'grok-2-vision-1212'];
+        for (const modelName of activeModels) {
           try {
             const res = await fetch('https://api.x.ai/v1/chat/completions', {
               method: 'POST',
@@ -304,7 +296,6 @@ ${ADMIN_REFERENCE_DOCS}
               return await res.json();
             } else {
               const errText = await res.text();
-              console.warn(`⚠️ Grok (${modelName}) 失敗 [HTTP ${res.status}]: ${errText}`);
               executionErrors[`Grok(${modelName})`] = `HTTP ${res.status}: ${errText}`;
             }
           } catch (err: any) {
@@ -322,7 +313,7 @@ ${ADMIN_REFERENCE_DOCS}
           Authorization: `Bearer ${openrouterKey}`,
         },
         body: JSON.stringify({
-          model: 'x-ai/grok-2-1212',
+          model: 'x-ai/grok-2',
           temperature: 0.0,
           messages: [
             { role: 'system', content: initialSystemPrompt },
@@ -341,7 +332,7 @@ ${ADMIN_REFERENCE_DOCS}
         return null;
       });
     } else {
-      executionErrors['Grok'] = `未設定 XAI_API_KEY (Server 檢測: process.env.XAI_API_KEY 存在 = ${!!process.env.XAI_API_KEY})`;
+      executionErrors['Grok'] = '未設定 XAI_API_KEY / GROK_API_KEY 或 OPENROUTER_API_KEY';
     }
 
     // 三模型平行同時執行
@@ -356,7 +347,7 @@ ${ADMIN_REFERENCE_DOCS}
     const draftGrok = grokData?.choices?.[0]?.message?.content || '';
 
     // ==================================================================
-    // 第二階段：Google Gemini 3.8 Flash 大師終極校訂與總審閱
+    // 第二階段：Google Gemini 終極校訂與總審閱
     // ==================================================================
     let finalReport = '';
     let geminiUsed = false;
