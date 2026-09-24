@@ -265,7 +265,7 @@ ${ADMIN_REFERENCE_DOCS}
       executionErrors['Qwen'] = '未設定 QWEN_API_KEY 或 OPENROUTER_API_KEY';
     }
 
-    // 1.3 Grok 初批 (優先順序調用最新 Grok 模型)
+    // 1.3 Grok 初批 (順序優先調用最新模型)
     let grokPromise: Promise<any> = Promise.resolve(null);
     
     const preferredXaiModels = ['grok-3', 'grok-2-latest', 'grok-2', 'grok-2-vision-1212'];
@@ -304,7 +304,6 @@ ${ADMIN_REFERENCE_DOCS}
           }
         }
 
-        // 若 xAI 直連失敗且設定了 OpenRouter Key，自動切換至 OpenRouter 調用 Grok
         if (openrouterKey) {
           console.log('🔄 xAI 直連失敗，自動切換至 OpenRouter 嘗試最新 Grok 模型...');
           for (const orModel of preferredOpenRouterModels) {
@@ -391,7 +390,7 @@ ${ADMIN_REFERENCE_DOCS}
     const draftGrok = grokData?.choices?.[0]?.message?.content || '';
 
     // ==================================================================
-    // 第二階段：Google Gemini 終極校訂與總審閱 (具備自動抗 503 備援)
+    // 第二階段：Google Gemini 3.8 Flash 大師終極校訂與總審閱
     // ==================================================================
     let finalReport = '';
     let geminiUsed = false;
@@ -431,43 +430,40 @@ ${draftGrok || '（xAI Grok 未回應）'}
 --------------------------------------------------
 `.trim();
 
-      // Gemini 多模型順序備援 (防 503 流量過載)
-      const geminiCandidateModels = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+      // 指定使用 gemini-3.8-flash 模型端點
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`;
 
-      for (const gemModel of geminiCandidateModels) {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${gemModel}:generateContent?key=${geminiKey}`;
-        try {
-          const geminiResponse = await fetch(geminiUrl, {
-            method: 'POST',
-            signal: AbortSignal.timeout(280000),
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: geminiPrompt }] }],
-              safetySettings: [
-                { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-                { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-                { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-                { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-              ],
-              generationConfig: { temperature: 0.0 },
-            }),
-          });
+      try {
+        const geminiResponse = await fetch(geminiUrl, {
+          method: 'POST',
+          signal: AbortSignal.timeout(280000),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: geminiPrompt }] }],
+            safetySettings: [
+              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+            ],
+            generationConfig: { temperature: 0.0 },
+          }),
+        });
 
-          if (geminiResponse.ok) {
-            const geminiData = await geminiResponse.json();
-            const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text && text.trim() !== '') {
-              finalReport = text;
-              geminiUsed = true;
-              break;
-            }
-          } else {
-            const err = await geminiResponse.text();
-            executionErrors[`Gemini(${gemModel})`] = `HTTP ${geminiResponse.status}: ${err}`;
+        if (geminiResponse.ok) {
+          const geminiData = await geminiResponse.json();
+          const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text && text.trim() !== '') {
+            finalReport = text;
+            geminiUsed = true;
+            console.log('✅ Gemini 3.8 Flash 大師終極校訂成功！');
           }
-        } catch (err: any) {
-          executionErrors[`Gemini(${gemModel})`] = `網路異常: ${err.message}`;
+        } else {
+          const err = await geminiResponse.text();
+          executionErrors['Gemini(gemini-3.8-flash)'] = `HTTP ${geminiResponse.status}: ${err}`;
         }
+      } catch (err: any) {
+        executionErrors['Gemini(gemini-3.8-flash)'] = `網路異常: ${err.message}`;
       }
     } else {
       executionErrors['Gemini'] = '未設定 GEMINI_API_KEY';
