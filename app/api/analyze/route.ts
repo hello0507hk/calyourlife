@@ -116,7 +116,6 @@ export async function POST(req: Request) {
     const dashscopeKey = process.env.QWEN_API_KEY?.trim();
     const openrouterKey = process.env.OPENROUTER_API_KEY?.trim();
 
-    // 相容多種 Grok API Key 命名
     const xaiKey = (
       process.env.XAI_API_KEY ||
       process.env.GROK_API_KEY ||
@@ -266,13 +265,16 @@ ${ADMIN_REFERENCE_DOCS}
       executionErrors['Qwen'] = '未設定 QWEN_API_KEY 或 OPENROUTER_API_KEY';
     }
 
-    // 1.3 Grok 初批 (改用 xAI 現行標準模型 ID: grok-2 與 grok-3)
+    // 1.3 Grok 初批 (明確指明優先使用 Grok 4.7 版)
     let grokPromise: Promise<any> = Promise.resolve(null);
+    
+    // 指明 Grok 4.7 為第一順位模型
+    const xaiModelsToTry = ['grok-4.7', 'grok-3', 'grok-2'];
+    const openRouterModelsToTry = ['x-ai/grok-4.7', 'x-ai/grok-3', 'x-ai/grok-2'];
+
     if (xaiKey) {
       grokPromise = (async () => {
-        // 更新為 xAI 當前活躍的模型 ID
-        const activeModels = ['grok-2', 'grok-3', 'grok-2-vision-1212'];
-        for (const modelName of activeModels) {
+        for (const modelName of xaiModelsToTry) {
           try {
             const res = await fetch('https://api.x.ai/v1/chat/completions', {
               method: 'POST',
@@ -292,7 +294,7 @@ ${ADMIN_REFERENCE_DOCS}
             });
 
             if (res.ok) {
-              console.log(`✅ Grok 直連成功 (${modelName})`);
+              console.log(`✅ Grok 直連成功，使用模型: (${modelName})`);
               return await res.json();
             } else {
               const errText = await res.text();
@@ -302,35 +304,78 @@ ${ADMIN_REFERENCE_DOCS}
             executionErrors[`Grok(${modelName})`] = `網路異常: ${err.message}`;
           }
         }
+
+        // 若 xAI 直連失敗且設定了 OpenRouter Key，自動備援嘗試 Grok 4.7
+        if (openrouterKey) {
+          console.log('🔄 xAI 直連失敗，切換至 OpenRouter 嘗試 Grok 4.7...');
+          for (const orModel of openRouterModelsToTry) {
+            try {
+              const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                signal: AbortSignal.timeout(280000),
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${openrouterKey}`,
+                },
+                body: JSON.stringify({
+                  model: orModel,
+                  temperature: 0.0,
+                  messages: [
+                    { role: 'system', content: initialSystemPrompt },
+                    { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
+                  ],
+                }),
+              });
+
+              if (res.ok) {
+                console.log(`✅ OpenRouter 備援成功，使用 Grok 模型: (${orModel})`);
+                return await res.json();
+              } else {
+                const errText = await res.text();
+                executionErrors[`Grok(OpenRouter:${orModel})`] = `HTTP ${res.status}: ${errText}`;
+              }
+            } catch (err: any) {
+              executionErrors[`Grok(OpenRouter:${orModel})`] = `網路異常: ${err.message}`;
+            }
+          }
+        }
+
         return null;
       })();
     } else if (openrouterKey) {
-      grokPromise = fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        signal: AbortSignal.timeout(280000),
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${openrouterKey}`,
-        },
-        body: JSON.stringify({
-          model: 'x-ai/grok-2',
-          temperature: 0.0,
-          messages: [
-            { role: 'system', content: initialSystemPrompt },
-            { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
-          ],
-        }),
-      }).then(async (res) => {
-        if (!res.ok) {
-          const err = await res.text();
-          executionErrors['Grok(OpenRouter)'] = `HTTP ${res.status}: ${err}`;
-          return null;
+      grokPromise = (async () => {
+        for (const orModel of openRouterModelsToTry) {
+          try {
+            const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+              method: 'POST',
+              signal: AbortSignal.timeout(280000),
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${openrouterKey}`,
+              },
+              body: JSON.stringify({
+                model: orModel,
+                temperature: 0.0,
+                messages: [
+                  { role: 'system', content: initialSystemPrompt },
+                  { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
+                ],
+              }),
+            });
+
+            if (res.ok) {
+              console.log(`✅ OpenRouter 成功，使用 Grok 模型: (${orModel})`);
+              return await res.json();
+            } else {
+              const errText = await res.text();
+              executionErrors[`Grok(OpenRouter:${orModel})`] = `HTTP ${res.status}: ${errText}`;
+            }
+          } catch (err: any) {
+            executionErrors[`Grok(OpenRouter:${orModel})`] = `網路異常: ${err.message}`;
+          }
         }
-        return res.json();
-      }).catch((err) => {
-        executionErrors['Grok(OpenRouter)'] = `網路異常: ${err.message}`;
         return null;
-      });
+      })();
     } else {
       executionErrors['Grok'] = '未設定 XAI_API_KEY / GROK_API_KEY 或 OPENROUTER_API_KEY';
     }
@@ -347,7 +392,7 @@ ${ADMIN_REFERENCE_DOCS}
     const draftGrok = grokData?.choices?.[0]?.message?.content || '';
 
     // ==================================================================
-    // 第二階段：Google Gemini 終極校訂與總審閱
+    // 第二階段：Google Gemini 終極校訂與總審閱 (具備自動抗 503 備援)
     // ==================================================================
     let finalReport = '';
     let geminiUsed = false;
@@ -387,38 +432,43 @@ ${draftGrok || '（xAI Grok 未回應）'}
 --------------------------------------------------
 `.trim();
 
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`;
+      // Gemini 多模型順序備援 (防 503 流量過載)
+      const geminiCandidateModels = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
 
-      try {
-        const geminiResponse = await fetch(geminiUrl, {
-          method: 'POST',
-          signal: AbortSignal.timeout(280000),
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: geminiPrompt }] }],
-            safetySettings: [
-              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-            ],
-            generationConfig: { temperature: 0.0 },
-          }),
-        });
+      for (const gemModel of geminiCandidateModels) {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${gemModel}:generateContent?key=${geminiKey}`;
+        try {
+          const geminiResponse = await fetch(geminiUrl, {
+            method: 'POST',
+            signal: AbortSignal.timeout(280000),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: geminiPrompt }] }],
+              safetySettings: [
+                { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+              ],
+              generationConfig: { temperature: 0.0 },
+            }),
+          });
 
-        if (geminiResponse.ok) {
-          const geminiData = await geminiResponse.json();
-          const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (text && text.trim() !== '') {
-            finalReport = text;
-            geminiUsed = true;
+          if (geminiResponse.ok) {
+            const geminiData = await geminiResponse.json();
+            const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text && text.trim() !== '') {
+              finalReport = text;
+              geminiUsed = true;
+              break;
+            }
+          } else {
+            const err = await geminiResponse.text();
+            executionErrors[`Gemini(${gemModel})`] = `HTTP ${geminiResponse.status}: ${err}`;
           }
-        } else {
-          const err = await geminiResponse.text();
-          executionErrors['Gemini'] = `HTTP ${geminiResponse.status}: ${err}`;
+        } catch (err: any) {
+          executionErrors[`Gemini(${gemModel})`] = `網路異常: ${err.message}`;
         }
-      } catch (err: any) {
-        executionErrors['Gemini'] = `網路異常: ${err.message}`;
       }
     } else {
       executionErrors['Gemini'] = '未設定 GEMINI_API_KEY';
