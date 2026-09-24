@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import { ADMIN_REFERENCE_DOCS } from '@/lib/adminKnowledge';
 
-// 延長 Vercel 超時限制至 300 秒（Vercel Pro 帳號生效）
+// 1. 強制每次請求皆動態獲取環境變數，防止 Next.js 快取 process.env
+export const dynamic = 'force-dynamic';
+
+// 2. 延長 Vercel 超時限制至 300 秒（Vercel Pro 帳號生效）
 export const maxDuration = 300;
 
-// 1. 自動計算天干五合
+// 自動計算天干五合
 function checkGanHe(gans: string[]) {
   const combinations = [
     { pair: ['甲', '己'], name: '甲己合化土' },
@@ -31,7 +34,7 @@ function checkGanHe(gans: string[]) {
   return uniqueFound.length > 0 ? uniqueFound.join('、') : '原局天干無五合組合';
 }
 
-// 2. 構建傳給 AI 的八字 Prompt 文字
+// 構建傳給 AI 的八字 Prompt 文字
 function buildBaziText(baziData: any, userNotes?: string) {
   const { eightChar, dayGan, dayGanWuxing, wuxingCounts, dayyun, solarDate, lunarDate, gender, genderText } = baziData;
 
@@ -102,7 +105,7 @@ ${dayyun.map((d: any) => `- ${d.age}歲起大運：${d.ganZhi}`).join('\n')}
   `.trim();
 }
 
-// 3. API Route 主入口
+// API Route 主入口
 export async function POST(req: Request) {
   const executionErrors: Record<string, string> = {};
 
@@ -121,6 +124,14 @@ export async function POST(req: Request) {
     )?.trim();
 
     const geminiKey = process.env.GEMINI_API_KEY?.trim();
+
+    // 後端即時偵測 Console 日誌
+    console.log('🔍 [API Env Verification]', {
+      DeepSeek: !!deepseekKey,
+      Qwen: !!dashscopeKey || !!openrouterKey,
+      xAI: !!xaiKey,
+      Gemini: !!geminiKey,
+    });
 
     if (!deepseekKey) {
       return NextResponse.json(
@@ -164,30 +175,11 @@ ${ADMIN_REFERENCE_DOCS}
 內容請嚴格分成以下六部分，並以 Markdown 格式輸出：
 
 ### 一、 日主旺衰、論調候、天干合化、定格局、評論格局高低，捉用神，詳細指出原局八字中的「病」和「藥」
-- 分析日主在月令的得令狀況與四柱整體氣勢。分析原局八字時，首要條件是先論日主屬陰屬陽，然後才論五行生尅制化。先看命主是陽日元還是陰日元，陽日元喜尅不喜泄，要有根，陰日元喜泄不喜尅，不怕弱
-- 必定依據此次序批原局裡是否有調候，第二步是必須跟據造化元鑰裡面的十干性情，命主日元生在不同月令時，需要什麼五行來做用神，第三步是看天干是否有合化，可跟據蔡進源師傅對天干五合的理論，甲己合化土，乙庚合化金，丙辛合化水，丁壬合化木，戊癸合化火，以「逢合必化，只分真假」來判斷化神是否用神，忌神或是調候用神，可知對命局有沒有幫助。第四步如果有殺，則需要有殺先論殺，日主和殺相比，殺弱就以財滋殺，日主比殺弱，就必要用傷官或食神制殺，或用印化殺，但格局只有一種，判定為財滋弱殺就原能用食神，傷官制殺和用印化殺，如殺比日元旺，用食神傷官制殺，就不能用印化殺，用印化殺就不能用食神或傷官制殺
-- 必須按照【命理分析穩定性與一致性約束】中的規定，明確列出並解釋八字原局的唯一「用神」、「病」和「藥神」，除非該五行被傷盡，否則應在原局八字中找出用神，如非必要，日元必須當令，才可以在月令藏元中捉用神
-- 捉用神必須以格局用神為準，不能以身弱用印比劫，身強用洩為用神，格局用神才是真用神，生旺用神是喜神，尅用神是忌神，尅忌神是藥神。用神用時可以是調候，可以是藥神。日元亦可以是用神。留意如果用神是火忌水，用神是水忌土，用神是金忌火，用神是土忌木，用神是木忌金
-
 ### 二、 格局與十神性格分析
-- 必須依據之前的八字分析，說明原命局的主要格局、破局，或者是無格局 (參考內部參考法則，滴天髓徵義和子平一得中所提到的命例格局）。
-- 分析天干主星與地支藏干對命主性格、做事風格的影響。（可參考內部參考法則、滴天髓徵義中的性情篇和子平一得對性格和驛馬中的解釋對命主的影響）
-
 ### 三、 五行喜忌與生活建議
-- 針對五行過旺或缺乏的項目，提供適合的行業方向、補運建議與心態調整。
-
 ### 四、 分析命主的出身，事業，感情和健康
-- 利用原局八字，分析命主的出身，家境和學業成績。（參考內部參考法則、滴天髓徵義對格局的評論，子平一得蔡進源師傅的命例，留意驛馬星或八字四柱有沒有天尅地沖，如有，要留意命主有沒有出國讀書的機會，分析原局八字和大運對命主出身，家境和學業成績的影響。）
-- 分析命主的事業和工作情況。用原局八字配合大運，配合十神含意和生尅制化，詳細解釋那一個大運對命主最為有利和特別需要注意的地方，批算時一定要先參考內部法則，滴天髓徵義對格局的評論，子平一得蔡進源師傅評註中的命例，留意有沒有驛馬，如有驛馬，要留意命主會否有到國外工作之類的機會，推論大運有什麼事發生
-- 先確認【命主性別】是乾造（男）還是坤造（女）。分析感情狀況時，直接以男命財星/女命官殺星確切論述，嚴禁寫「假設」。配合內部參考法則與滴天髓徵義女命篇，詳細解釋那一個時候最易有桃花和真姻緣出現，觀察妻星或夫星有沒有在大運或流年出現，或地支六合、會局或沖合夫妻宮。
-
 ### 五、 選當前大運計過去1個大運及未來3至4個主要大運，詳細評估大運干支對原局用神的影響，跟據十神含意，批斷該大運否能會發生的吉事和凶事，並且提供解決方法
-- 參考提到所有精通的八字書藉和內部參考法則，詳細分析原局八字加大運配合流年對命主的影響，利用十神含意推論產生的象，詳細解釋有機會發生什麼事，是吉是凶，提供趨吉避凶的方法
-
-### 六、 當下流年運勢評語
-- 利用日主所輸入的出生日期，結合八字命盤，配合大運及流年，利用十神含意，生尅制化，詳細評估對命主該年流年運勢的影響，包括吉凶、變化與可能的發展方向，並提供趨吉避凶的方法
-
-語氣請保持客觀、理性且富有建設性，避免過度武斷或誇大災禍。`;
+### 六、 當下流年運勢評語`;
 
     // ==================================================================
     // 第一階段：DeepSeek + Qwen + Grok 三 AI 平行同步初批 (Promise.all)
@@ -214,7 +206,6 @@ ${ADMIN_REFERENCE_DOCS}
       if (!res.ok) {
         const err = await res.text();
         executionErrors['DeepSeek'] = `HTTP ${res.status}: ${err}`;
-        console.error('❌ DeepSeek 呼叫失敗:', res.status, err);
         return null;
       }
       return res.json();
@@ -283,76 +274,43 @@ ${ADMIN_REFERENCE_DOCS}
       executionErrors['Qwen'] = '未設定 QWEN_API_KEY 或 OPENROUTER_API_KEY';
     }
 
-    // 1.3 Grok 初批 (動態偵測可用的 Grok 模型 + 多層自動備援)
+    // 1.3 Grok 初批 (採用直連 + 順序自動退回)
     let grokPromise: Promise<any> = Promise.resolve(null);
     if (xaiKey) {
       grokPromise = (async () => {
-        let selectedModel = 'grok-2-1212'; // 備用模型名稱
+        // xAI 官方標準模型名稱順序
+        const candidateModels = ['grok-2-latest', 'grok-2-1212', 'grok-beta'];
+        for (const modelName of candidateModels) {
+          try {
+            const res = await fetch('https://api.x.ai/v1/chat/completions', {
+              method: 'POST',
+              signal: AbortSignal.timeout(280000),
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${xaiKey}`,
+              },
+              body: JSON.stringify({
+                model: modelName,
+                temperature: 0.0,
+                messages: [
+                  { role: 'system', content: initialSystemPrompt },
+                  { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
+                ],
+              }),
+            });
 
-        // 步驟 A: 動態向 xAI API 查詢你的 API Key 擁有的最新模型列表
-        try {
-          const modelsRes = await fetch('https://api.x.ai/v1/models', {
-            method: 'GET',
-            headers: { Authorization: `Bearer ${xaiKey}` },
-            signal: AbortSignal.timeout(10000),
-          });
-
-          if (modelsRes.ok) {
-            const modelsData = await modelsRes.json();
-            const availableModels: string[] = (modelsData.data || []).map((m: any) => m.id);
-            console.log('📋 xAI 帳號可用模型列表:', availableModels);
-
-            // 優先選擇最優秀的 Grok 模型
-            const priorityList = ['grok-4.7', 'grok-4', 'grok-3', 'grok-2-1212', 'grok-2'];
-            const matched = priorityList.find((p) => availableModels.includes(p));
-            if (matched) {
-              selectedModel = matched;
-            } else if (availableModels.length > 0) {
-              selectedModel = availableModels[0];
+            if (res.ok) {
+              console.log(`✅ Grok 直連成功 (${modelName})`);
+              return await res.json();
+            } else {
+              const errText = await res.text();
+              console.warn(`⚠️ Grok (${modelName}) 失敗 [HTTP ${res.status}]: ${errText}`);
+              executionErrors[`Grok(${modelName})`] = `HTTP ${res.status}: ${errText}`;
             }
-          } else {
-            const errText = await modelsRes.text();
-            console.warn(`⚠️ 無法查詢 xAI 模型列表 [HTTP ${modelsRes.status}]: ${errText}`);
-            executionErrors['xAI_Models_Check'] = `HTTP ${modelsRes.status}: ${errText}`;
+          } catch (err: any) {
+            executionErrors[`Grok(${modelName})`] = `網路異常: ${err.message}`;
           }
-        } catch (e: any) {
-          console.warn('⚠️ 查詢 xAI 模型列表網路超時:', e.message);
         }
-
-        console.log(`🤖 準備呼叫 xAI 模型: ${selectedModel}`);
-
-        // 步驟 B: 發起聊天生成請求
-        try {
-          const res = await fetch('https://api.x.ai/v1/chat/completions', {
-            method: 'POST',
-            signal: AbortSignal.timeout(280000),
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${xaiKey}`,
-            },
-            body: JSON.stringify({
-              model: selectedModel,
-              temperature: 0.0,
-              messages: [
-                { role: 'system', content: initialSystemPrompt },
-                { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
-              ],
-            }),
-          });
-
-          if (res.ok) {
-            console.log(`✅ Grok (${selectedModel}) 成功回應！`);
-            return await res.json();
-          } else {
-            const err = await res.text();
-            console.error(`❌ Grok (${selectedModel}) 呼叫失敗 [${res.status}]:`, err);
-            executionErrors[`Grok(${selectedModel})`] = `HTTP ${res.status}: ${err}`;
-          }
-        } catch (err: any) {
-          console.error(`❌ Grok (${selectedModel}) 網路發送異常:`, err);
-          executionErrors[`Grok(${selectedModel})`] = `網路異常: ${err.message}`;
-        }
-
         return null;
       })();
     } else if (openrouterKey) {
@@ -375,7 +333,6 @@ ${ADMIN_REFERENCE_DOCS}
         if (!res.ok) {
           const err = await res.text();
           executionErrors['Grok(OpenRouter)'] = `HTTP ${res.status}: ${err}`;
-          console.error('❌ Grok (OpenRouter) 呼叫失敗:', res.status, err);
           return null;
         }
         return res.json();
@@ -384,7 +341,7 @@ ${ADMIN_REFERENCE_DOCS}
         return null;
       });
     } else {
-      executionErrors['Grok'] = '未設定 XAI_API_KEY / GROK_API_KEY 或 OPENROUTER_API_KEY';
+      executionErrors['Grok'] = `未設定 XAI_API_KEY (Server 檢測: process.env.XAI_API_KEY 存在 = ${!!process.env.XAI_API_KEY})`;
     }
 
     // 三模型平行同時執行
@@ -399,7 +356,7 @@ ${ADMIN_REFERENCE_DOCS}
     const draftGrok = grokData?.choices?.[0]?.message?.content || '';
 
     // ==================================================================
-    // 第二階段：Google Gemini 3.8 Flash 大師終極校訂與總審閱（保留原設定）
+    // 第二階段：Google Gemini 3.8 Flash 大師終極校訂與總審閱
     // ==================================================================
     let finalReport = '';
     let geminiUsed = false;
@@ -464,16 +421,13 @@ ${draftGrok || '（xAI Grok 未回應）'}
           if (text && text.trim() !== '') {
             finalReport = text;
             geminiUsed = true;
-            console.log('✅ Gemini 3.8 Flash 大師終極校訂成功回應！');
           }
         } else {
           const err = await geminiResponse.text();
           executionErrors['Gemini'] = `HTTP ${geminiResponse.status}: ${err}`;
-          console.error(`❌ Gemini 3.8 Flash 校訂失敗 [HTTP ${geminiResponse.status}]:`, err);
         }
       } catch (err: any) {
         executionErrors['Gemini'] = `網路異常: ${err.message}`;
-        console.error('❌ Gemini 網路連線異常:', err);
       }
     } else {
       executionErrors['Gemini'] = '未設定 GEMINI_API_KEY';
@@ -482,14 +436,6 @@ ${draftGrok || '（xAI Grok 未回應）'}
     if (!finalReport) {
       finalReport = draftDeepseek || draftQwen || draftGrok || '未取得分析結果，請檢視 API 金鑰與點數設定。';
     }
-
-    console.log('--------------------------------------------------');
-    console.log('【四 AI 聯合會診調用狀態總覽】：');
-    console.log(`1. DeepSeek 初批 ： ${draftDeepseek ? '✅ 成功回應' : '❌ 失敗'}`);
-    console.log(`2. Qwen 初批     ： ${draftQwen ? '✅ 成功回應' : '❌ 失敗'}`);
-    console.log(`3. Grok 初批     ： ${draftGrok ? '✅ 成功回應' : '❌ 失敗'}`);
-    console.log(`4. Gemini 3.8 Flash 終極校訂： ${geminiUsed ? '✅ 成功稽核' : '❌ 失敗 / 降級輸出'}`);
-    console.log('--------------------------------------------------');
 
     return NextResponse.json({
       result: finalReport,
@@ -503,7 +449,6 @@ ${draftGrok || '（xAI Grok 未回應）'}
     });
 
   } catch (error: any) {
-    console.error('伺服器處理異常:', error);
     return NextResponse.json(
       { error: error.message || '伺服器內部錯誤', details: executionErrors },
       { status: 500 }
