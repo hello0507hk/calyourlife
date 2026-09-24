@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ADMIN_REFERENCE_DOCS } from '@/lib/adminKnowledge';
 
-// 延長 Vercel 超時限制至 300 秒（須 Vercel Pro 帳號生效）
+// 延長 Vercel 超時限制至 300 秒（Vercel Pro 帳號生效）
 export const maxDuration = 300;
 
 // 1. 自動計算天干五合
@@ -193,9 +193,10 @@ ${ADMIN_REFERENCE_DOCS}
     // 第一階段：DeepSeek + Qwen + Grok 4.7 三 AI 平行同步初批 (Promise.all)
     // ==================================================================
 
-    // 1.1 DeepSeek 初批
+    // 1.1 DeepSeek 初批 (設定 280 秒 HTTP Socket 保活)
     const deepseekPromise = fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
+      signal: AbortSignal.timeout(280000),
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${deepseekKey}`,
@@ -219,7 +220,6 @@ ${ADMIN_REFERENCE_DOCS}
       return res.json();
     }).catch((err) => {
       executionErrors['DeepSeek'] = `網路異常: ${err.message}`;
-      console.error('❌ DeepSeek 網路發送異常:', err);
       return null;
     });
 
@@ -228,6 +228,7 @@ ${ADMIN_REFERENCE_DOCS}
     if (openrouterKey) {
       qwenPromise = fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
+        signal: AbortSignal.timeout(280000),
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${openrouterKey}`,
@@ -244,7 +245,6 @@ ${ADMIN_REFERENCE_DOCS}
         if (!res.ok) {
           const err = await res.text();
           executionErrors['Qwen(OpenRouter)'] = `HTTP ${res.status}: ${err}`;
-          console.error('❌ Qwen (OpenRouter) 呼叫失敗:', res.status, err);
           return null;
         }
         return res.json();
@@ -255,6 +255,7 @@ ${ADMIN_REFERENCE_DOCS}
     } else if (dashscopeKey) {
       qwenPromise = fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
         method: 'POST',
+        signal: AbortSignal.timeout(280000),
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${dashscopeKey}`,
@@ -282,18 +283,19 @@ ${ADMIN_REFERENCE_DOCS}
       executionErrors['Qwen'] = '未設定 QWEN_API_KEY 或 OPENROUTER_API_KEY';
     }
 
-    // 1.3 Grok 4.7 初批 (指定 grok-4.7 模型)
+    // 1.3 Grok 4.7 初批（加入 280 秒超時與雙管道自動相容）
     let grokPromise: Promise<any> = Promise.resolve(null);
     if (xaiKey) {
       grokPromise = fetch('https://api.x.ai/v1/chat/completions', {
         method: 'POST',
+        signal: AbortSignal.timeout(280000), // 強制 Socket 保活 280 秒
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${xaiKey}`,
         },
         body: JSON.stringify({
-          model: 'grok-4.7', // xAI 官方 Grok 4.7 端點
-          temperature: 0.0,
+          model: 'grok-4.7',
+          reasoning_effort: 'low',
           messages: [
             { role: 'system', content: initialSystemPrompt },
             { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
@@ -314,13 +316,14 @@ ${ADMIN_REFERENCE_DOCS}
     } else if (openrouterKey) {
       grokPromise = fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
+        signal: AbortSignal.timeout(280000),
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${openrouterKey}`,
         },
         body: JSON.stringify({
-          model: 'x-ai/grok-4.7', // OpenRouter 上的 Grok 4.7 端點
-          temperature: 0.0,
+          model: 'x-ai/grok-4.7',
+          reasoning_effort: 'low',
           messages: [
             { role: 'system', content: initialSystemPrompt },
             { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
@@ -399,6 +402,7 @@ ${draftGrok || '（xAI Grok 4.7 未回應）'}
       try {
         const geminiResponse = await fetch(geminiUrl, {
           method: 'POST',
+          signal: AbortSignal.timeout(280000),
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: geminiPrompt }] }],
@@ -433,7 +437,6 @@ ${draftGrok || '（xAI Grok 4.7 未回應）'}
       executionErrors['Gemini'] = '未設定 GEMINI_API_KEY';
     }
 
-    // 若 Gemini 審閱失敗或未設定 Key，自動降級輸出
     if (!finalReport) {
       finalReport = draftDeepseek || draftQwen || draftGrok || '未取得分析結果，請檢視 API 金鑰與點數設定。';
     }
