@@ -190,7 +190,7 @@ ${ADMIN_REFERENCE_DOCS}
 語氣請保持客觀、理性且富有建設性，避免過度武斷或誇大災禍。`;
 
     // ==================================================================
-    // 第一階段：DeepSeek + Qwen + Grok 4.7 三 AI 平行同步初批 (Promise.all)
+    // 第一階段：DeepSeek + Qwen + Grok 三 AI 平行同步初批 (Promise.all)
     // ==================================================================
 
     // 1.1 DeepSeek 初批 (設定 280 秒 HTTP Socket 保活)
@@ -283,36 +283,45 @@ ${ADMIN_REFERENCE_DOCS}
       executionErrors['Qwen'] = '未設定 QWEN_API_KEY 或 OPENROUTER_API_KEY';
     }
 
-    // 1.3 Grok 4.7 初批（加入 280 秒超時與雙管道自動相容）
+    // 1.3 Grok 初批（專為 xAI 重構：移除無效 reasoning_effort，加入自動備援）
     let grokPromise: Promise<any> = Promise.resolve(null);
     if (xaiKey) {
-      grokPromise = fetch('https://api.x.ai/v1/chat/completions', {
-        method: 'POST',
-        signal: AbortSignal.timeout(280000), // 強制 Socket 保活 280 秒
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${xaiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'grok-4.7',
-          reasoning_effort: 'low',
-          messages: [
-            { role: 'system', content: initialSystemPrompt },
-            { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
-          ],
-        }),
-      }).then(async (res) => {
-        if (!res.ok) {
-          const err = await res.text();
-          executionErrors['Grok4.7(xAI)'] = `HTTP ${res.status}: ${err}`;
-          console.error('❌ Grok 4.7 (xAI) 呼叫失敗:', res.status, err);
-          return null;
+      grokPromise = (async () => {
+        const modelsToTry = ['grok-2-1212', 'grok-2', 'grok-beta'];
+        for (const modelName of modelsToTry) {
+          try {
+            const res = await fetch('https://api.x.ai/v1/chat/completions', {
+              method: 'POST',
+              signal: AbortSignal.timeout(280000),
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${xaiKey}`,
+              },
+              body: JSON.stringify({
+                model: modelName,
+                temperature: 0.0,
+                messages: [
+                  { role: 'system', content: initialSystemPrompt },
+                  { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
+                ],
+              }),
+            });
+
+            if (res.ok) {
+              console.log(`✅ Grok (${modelName}) 成功回應！`);
+              return await res.json();
+            } else {
+              const err = await res.text();
+              console.error(`❌ Grok (${modelName}) 失敗 [${res.status}]:`, err);
+              executionErrors[`Grok(${modelName})`] = `HTTP ${res.status}: ${err}`;
+            }
+          } catch (err: any) {
+            console.error(`❌ Grok (${modelName}) 網路異常:`, err);
+            executionErrors[`Grok(${modelName})`] = `網路異常: ${err.message}`;
+          }
         }
-        return res.json();
-      }).catch((err) => {
-        executionErrors['Grok4.7(xAI)'] = `網路異常: ${err.message}`;
         return null;
-      });
+      })();
     } else if (openrouterKey) {
       grokPromise = fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -322,8 +331,8 @@ ${ADMIN_REFERENCE_DOCS}
           Authorization: `Bearer ${openrouterKey}`,
         },
         body: JSON.stringify({
-          model: 'x-ai/grok-4.7',
-          reasoning_effort: 'low',
+          model: 'x-ai/grok-2-1212',
+          temperature: 0.0,
           messages: [
             { role: 'system', content: initialSystemPrompt },
             { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
@@ -332,17 +341,17 @@ ${ADMIN_REFERENCE_DOCS}
       }).then(async (res) => {
         if (!res.ok) {
           const err = await res.text();
-          executionErrors['Grok4.7(OpenRouter)'] = `HTTP ${res.status}: ${err}`;
-          console.error('❌ Grok 4.7 (OpenRouter) 呼叫失敗:', res.status, err);
+          executionErrors['Grok(OpenRouter)'] = `HTTP ${res.status}: ${err}`;
+          console.error('❌ Grok (OpenRouter) 呼叫失敗:', res.status, err);
           return null;
         }
         return res.json();
       }).catch((err) => {
-        executionErrors['Grok4.7(OpenRouter)'] = `網路異常: ${err.message}`;
+        executionErrors['Grok(OpenRouter)'] = `網路異常: ${err.message}`;
         return null;
       });
     } else {
-      executionErrors['Grok4.7'] = '未設定 XAI_API_KEY / GROK_API_KEY 或 OPENROUTER_API_KEY';
+      executionErrors['Grok'] = '未設定 XAI_API_KEY / GROK_API_KEY 或 OPENROUTER_API_KEY';
     }
 
     // 三模型平行同時執行
@@ -357,7 +366,7 @@ ${ADMIN_REFERENCE_DOCS}
     const draftGrok = grokData?.choices?.[0]?.message?.content || '';
 
     // ==================================================================
-    // 第二階段：Google Gemini 3.8 Flash 大師終極校訂與總審閱
+    // 第二階段：Google Gemini 3.8 Flash 大師終極校訂與總審閱（完整保留原設定）
     // ==================================================================
     let finalReport = '';
     let geminiUsed = false;
@@ -365,10 +374,10 @@ ${ADMIN_REFERENCE_DOCS}
     if (geminiKey) {
       const geminiPrompt = `
 你是一位權威八字命理總審閱官，精通子平八字、《滴天髓徵義》、《造化元鑰》、《子平一得》、神峰通考和命理師指定的內部參考法則。
-以下是由三位命理 AI（DeepSeek、Qwen 通義千問與 xAI Grok 4.7）對同一八字進行的初批草稿。
+以下是由三位命理 AI（DeepSeek、Qwen 通義千問與 xAI Grok）對同一八字進行的初批草稿。
 
 【審閱與嚴格修正要求】：
-1. 嚴格對照【原八字排盤數據】與【內部參考規範】，對比 DeepSeek、Qwen 與 Grok 4.7 對於「用神、格局、病藥、喜忌」的判定。若有分歧，必須依據《造化元鑰》十干月令喜忌與《子平一得》為唯一標準進行裁決，確定唯一的格局與用神，嚴禁出現前後矛盾，用神不等於調候用神。
+1. 嚴格對照【原八字排盤數據】與【內部參考規範】，對比 DeepSeek、Qwen 與 Grok 對於「用神、格局、病藥、喜忌」的判定。若有分歧，必須依據《造化元鑰》十干月令喜忌與《子平一得》為唯一標準進行裁決，確定唯一的格局與用神，嚴禁出現前後矛盾，用神不等於調候用神。
 2. 檢查初批報告有無「十神生剋錯誤」、「天干合化誤判」或「前後喜用神不一致」等邏輯矛盾，在批斷大運和流年吉凶等事情，是否有所遺漏錯誤，如有，應作出補註或修改。
 3. 確保第四部分感情婚姻分析 100% 符合命主的實際性別（男命論妻、女命論夫），完全刪除任何「假設命主為男/女」等不確定字眼。
 4. 檢查「格局」與「用神」是否唯一，嚴禁同時出現兩種矛盾格局判定。
@@ -392,8 +401,8 @@ ${draftDeepseek || '（DeepSeek 未回應）'}
 【初批草稿二 (Qwen 通義千問)】：
 ${draftQwen || '（Qwen 未回應）'}
 
-【初批草稿三 (xAI Grok 4.7)】：
-${draftGrok || '（xAI Grok 4.7 未回應）'}
+【初批草稿三 (xAI Grok)】：
+${draftGrok || '（xAI Grok 未回應）'}
 --------------------------------------------------
 `.trim();
 
@@ -445,7 +454,7 @@ ${draftGrok || '（xAI Grok 4.7 未回應）'}
     console.log('【四 AI 聯合會診調用狀態總覽】：');
     console.log(`1. DeepSeek 初批 ： ${draftDeepseek ? '✅ 成功回應' : '❌ 失敗'}`);
     console.log(`2. Qwen 初批     ： ${draftQwen ? '✅ 成功回應' : '❌ 失敗'}`);
-    console.log(`3. Grok 4.7 初批 ： ${draftGrok ? '✅ 成功回應' : '❌ 失敗'}`);
+    console.log(`3. Grok 初批     ： ${draftGrok ? '✅ 成功回應' : '❌ 失敗'}`);
     console.log(`4. Gemini 3.8 Flash 終極校訂： ${geminiUsed ? '✅ 成功稽核' : '❌ 失敗 / 降級輸出'}`);
     console.log('--------------------------------------------------');
 
