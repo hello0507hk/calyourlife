@@ -193,7 +193,7 @@ ${ADMIN_REFERENCE_DOCS}
     // 第一階段：DeepSeek + Qwen + Grok 三 AI 平行同步初批 (Promise.all)
     // ==================================================================
 
-    // 1.1 DeepSeek 初批 (設定 280 秒 HTTP Socket 保活)
+    // 1.1 DeepSeek 初批
     const deepseekPromise = fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
       signal: AbortSignal.timeout(280000),
@@ -283,43 +283,76 @@ ${ADMIN_REFERENCE_DOCS}
       executionErrors['Qwen'] = '未設定 QWEN_API_KEY 或 OPENROUTER_API_KEY';
     }
 
-    // 1.3 Grok 初批（專為 xAI 重構：移除無效 reasoning_effort，加入自動備援）
+    // 1.3 Grok 初批 (動態偵測可用的 Grok 模型 + 多層自動備援)
     let grokPromise: Promise<any> = Promise.resolve(null);
     if (xaiKey) {
       grokPromise = (async () => {
-        const modelsToTry = ['grok-2-1212', 'grok-2', 'grok-beta'];
-        for (const modelName of modelsToTry) {
-          try {
-            const res = await fetch('https://api.x.ai/v1/chat/completions', {
-              method: 'POST',
-              signal: AbortSignal.timeout(280000),
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${xaiKey}`,
-              },
-              body: JSON.stringify({
-                model: modelName,
-                temperature: 0.0,
-                messages: [
-                  { role: 'system', content: initialSystemPrompt },
-                  { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
-                ],
-              }),
-            });
+        let selectedModel = 'grok-2-1212'; // 備用模型名稱
 
-            if (res.ok) {
-              console.log(`✅ Grok (${modelName}) 成功回應！`);
-              return await res.json();
-            } else {
-              const err = await res.text();
-              console.error(`❌ Grok (${modelName}) 失敗 [${res.status}]:`, err);
-              executionErrors[`Grok(${modelName})`] = `HTTP ${res.status}: ${err}`;
+        // 步驟 A: 動態向 xAI API 查詢你的 API Key 擁有的最新模型列表
+        try {
+          const modelsRes = await fetch('https://api.x.ai/v1/models', {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${xaiKey}` },
+            signal: AbortSignal.timeout(10000),
+          });
+
+          if (modelsRes.ok) {
+            const modelsData = await modelsRes.json();
+            const availableModels: string[] = (modelsData.data || []).map((m: any) => m.id);
+            console.log('📋 xAI 帳號可用模型列表:', availableModels);
+
+            // 優先選擇最優秀的 Grok 模型
+            const priorityList = ['grok-4.7', 'grok-4', 'grok-3', 'grok-2-1212', 'grok-2'];
+            const matched = priorityList.find((p) => availableModels.includes(p));
+            if (matched) {
+              selectedModel = matched;
+            } else if (availableModels.length > 0) {
+              selectedModel = availableModels[0];
             }
-          } catch (err: any) {
-            console.error(`❌ Grok (${modelName}) 網路異常:`, err);
-            executionErrors[`Grok(${modelName})`] = `網路異常: ${err.message}`;
+          } else {
+            const errText = await modelsRes.text();
+            console.warn(`⚠️ 無法查詢 xAI 模型列表 [HTTP ${modelsRes.status}]: ${errText}`);
+            executionErrors['xAI_Models_Check'] = `HTTP ${modelsRes.status}: ${errText}`;
           }
+        } catch (e: any) {
+          console.warn('⚠️ 查詢 xAI 模型列表網路超時:', e.message);
         }
+
+        console.log(`🤖 準備呼叫 xAI 模型: ${selectedModel}`);
+
+        // 步驟 B: 發起聊天生成請求
+        try {
+          const res = await fetch('https://api.x.ai/v1/chat/completions', {
+            method: 'POST',
+            signal: AbortSignal.timeout(280000),
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${xaiKey}`,
+            },
+            body: JSON.stringify({
+              model: selectedModel,
+              temperature: 0.0,
+              messages: [
+                { role: 'system', content: initialSystemPrompt },
+                { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
+              ],
+            }),
+          });
+
+          if (res.ok) {
+            console.log(`✅ Grok (${selectedModel}) 成功回應！`);
+            return await res.json();
+          } else {
+            const err = await res.text();
+            console.error(`❌ Grok (${selectedModel}) 呼叫失敗 [${res.status}]:`, err);
+            executionErrors[`Grok(${selectedModel})`] = `HTTP ${res.status}: ${err}`;
+          }
+        } catch (err: any) {
+          console.error(`❌ Grok (${selectedModel}) 網路發送異常:`, err);
+          executionErrors[`Grok(${selectedModel})`] = `網路異常: ${err.message}`;
+        }
+
         return null;
       })();
     } else if (openrouterKey) {
@@ -366,7 +399,7 @@ ${ADMIN_REFERENCE_DOCS}
     const draftGrok = grokData?.choices?.[0]?.message?.content || '';
 
     // ==================================================================
-    // 第二階段：Google Gemini 3.8 Flash 大師終極校訂與總審閱（完整保留原設定）
+    // 第二階段：Google Gemini 3.8 Flash 大師終極校訂與總審閱（保留原設定）
     // ==================================================================
     let finalReport = '';
     let geminiUsed = false;
