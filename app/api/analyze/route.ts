@@ -112,7 +112,14 @@ export async function POST(req: Request) {
     const deepseekKey = process.env.DEEPSEEK_API_KEY?.trim();
     const dashscopeKey = process.env.QWEN_API_KEY?.trim();
     const openrouterKey = process.env.OPENROUTER_API_KEY?.trim();
-    const xaiKey = process.env.XAI_API_KEY?.trim();
+
+    // 相容多種 Grok API Key 命名
+    const xaiKey = (
+      process.env.XAI_API_KEY ||
+      process.env.GROK_API_KEY ||
+      process.env.XAI_KEY
+    )?.trim();
+
     const geminiKey = process.env.GEMINI_API_KEY?.trim();
 
     if (!deepseekKey) {
@@ -275,7 +282,7 @@ ${ADMIN_REFERENCE_DOCS}
       executionErrors['Qwen'] = '未設定 QWEN_API_KEY 或 OPENROUTER_API_KEY';
     }
 
-    // 1.3 Grok 4.7 初批
+    // 1.3 Grok 4.7 初批 (指定 grok-4.7 模型)
     let grokPromise: Promise<any> = Promise.resolve(null);
     if (xaiKey) {
       grokPromise = fetch('https://api.x.ai/v1/chat/completions', {
@@ -285,7 +292,7 @@ ${ADMIN_REFERENCE_DOCS}
           Authorization: `Bearer ${xaiKey}`,
         },
         body: JSON.stringify({
-          model: 'grok-4.7',
+          model: 'grok-4.7', // xAI 官方 Grok 4.7 端點
           temperature: 0.0,
           messages: [
             { role: 'system', content: initialSystemPrompt },
@@ -295,13 +302,13 @@ ${ADMIN_REFERENCE_DOCS}
       }).then(async (res) => {
         if (!res.ok) {
           const err = await res.text();
-          executionErrors['Grok(xAI)'] = `HTTP ${res.status}: ${err}`;
+          executionErrors['Grok4.7(xAI)'] = `HTTP ${res.status}: ${err}`;
           console.error('❌ Grok 4.7 (xAI) 呼叫失敗:', res.status, err);
           return null;
         }
         return res.json();
       }).catch((err) => {
-        executionErrors['Grok(xAI)'] = `網路異常: ${err.message}`;
+        executionErrors['Grok4.7(xAI)'] = `網路異常: ${err.message}`;
         return null;
       });
     } else if (openrouterKey) {
@@ -312,7 +319,7 @@ ${ADMIN_REFERENCE_DOCS}
           Authorization: `Bearer ${openrouterKey}`,
         },
         body: JSON.stringify({
-          model: 'x-ai/grok-4.7',
+          model: 'x-ai/grok-4.7', // OpenRouter 上的 Grok 4.7 端點
           temperature: 0.0,
           messages: [
             { role: 'system', content: initialSystemPrompt },
@@ -322,17 +329,17 @@ ${ADMIN_REFERENCE_DOCS}
       }).then(async (res) => {
         if (!res.ok) {
           const err = await res.text();
-          executionErrors['Grok(OpenRouter)'] = `HTTP ${res.status}: ${err}`;
+          executionErrors['Grok4.7(OpenRouter)'] = `HTTP ${res.status}: ${err}`;
           console.error('❌ Grok 4.7 (OpenRouter) 呼叫失敗:', res.status, err);
           return null;
         }
         return res.json();
       }).catch((err) => {
-        executionErrors['Grok(OpenRouter)'] = `網路異常: ${err.message}`;
+        executionErrors['Grok4.7(OpenRouter)'] = `網路異常: ${err.message}`;
         return null;
       });
     } else {
-      executionErrors['Grok'] = '未設定 XAI_API_KEY 或 OPENROUTER_API_KEY';
+      executionErrors['Grok4.7'] = '未設定 XAI_API_KEY / GROK_API_KEY 或 OPENROUTER_API_KEY';
     }
 
     // 三模型平行同時執行
@@ -387,7 +394,6 @@ ${draftGrok || '（xAI Grok 4.7 未回應）'}
 --------------------------------------------------
 `.trim();
 
-      // 升級至 gemini-3.8-flash 端點
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`;
 
       try {
@@ -402,7 +408,7 @@ ${draftGrok || '（xAI Grok 4.7 未回應）'}
               { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
               { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
             ],
-            generationConfig: { temperature: 0.0 }, // 設為 0.0 確保審閱極致穩定
+            generationConfig: { temperature: 0.0 },
           }),
         });
 
