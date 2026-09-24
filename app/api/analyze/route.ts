@@ -265,16 +265,15 @@ ${ADMIN_REFERENCE_DOCS}
       executionErrors['Qwen'] = '未設定 QWEN_API_KEY 或 OPENROUTER_API_KEY';
     }
 
-    // 1.3 Grok 初批 (明確指明優先使用 Grok 4.7 版)
+    // 1.3 Grok 初批 (優先順序調用最新 Grok 模型)
     let grokPromise: Promise<any> = Promise.resolve(null);
     
-    // 指明 Grok 4.7 為第一順位模型
-    const xaiModelsToTry = ['grok-4.7', 'grok-3', 'grok-2'];
-    const openRouterModelsToTry = ['x-ai/grok-4.7', 'x-ai/grok-3', 'x-ai/grok-2'];
+    const preferredXaiModels = ['grok-3', 'grok-2-latest', 'grok-2', 'grok-2-vision-1212'];
+    const preferredOpenRouterModels = ['x-ai/grok-3', 'x-ai/grok-2', 'x-ai/grok-2-vision'];
 
     if (xaiKey) {
       grokPromise = (async () => {
-        for (const modelName of xaiModelsToTry) {
+        for (const modelName of preferredXaiModels) {
           try {
             const res = await fetch('https://api.x.ai/v1/chat/completions', {
               method: 'POST',
@@ -305,10 +304,10 @@ ${ADMIN_REFERENCE_DOCS}
           }
         }
 
-        // 若 xAI 直連失敗且設定了 OpenRouter Key，自動備援嘗試 Grok 4.7
+        // 若 xAI 直連失敗且設定了 OpenRouter Key，自動切換至 OpenRouter 調用 Grok
         if (openrouterKey) {
-          console.log('🔄 xAI 直連失敗，切換至 OpenRouter 嘗試 Grok 4.7...');
-          for (const orModel of openRouterModelsToTry) {
+          console.log('🔄 xAI 直連失敗，自動切換至 OpenRouter 嘗試最新 Grok 模型...');
+          for (const orModel of preferredOpenRouterModels) {
             try {
               const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
@@ -344,7 +343,7 @@ ${ADMIN_REFERENCE_DOCS}
       })();
     } else if (openrouterKey) {
       grokPromise = (async () => {
-        for (const orModel of openRouterModelsToTry) {
+        for (const orModel of preferredOpenRouterModels) {
           try {
             const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
               method: 'POST',
