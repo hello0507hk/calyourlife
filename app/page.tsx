@@ -196,21 +196,6 @@ const range = (start: number, end: number, suffix: string) =>
     return { value: String(n), label: `${n}${suffix}` };
   });
 
-const SHICHEN = [
-  { value: '0', label: '子時 (23:00-01:00)' },
-  { value: '2', label: '丑時 (01:00-03:00)' },
-  { value: '4', label: '寅時 (03:00-05:00)' },
-  { value: '6', label: '卯時 (05:00-07:00)' },
-  { value: '8', label: '辰時 (07:00-09:00)' },
-  { value: '10', label: '巳時 (09:00-11:00)' },
-  { value: '12', label: '午時 (11:00-13:00)' },
-  { value: '14', label: '未時 (13:00-15:00)' },
-  { value: '16', label: '申時 (15:00-17:00)' },
-  { value: '18', label: '酉時 (17:00-19:00)' },
-  { value: '20', label: '戌時 (19:00-21:00)' },
-  { value: '22', label: '亥時 (21:00-23:00)' },
-];
-
 function BaziForm({
   onSubmit,
   loading,
@@ -221,6 +206,7 @@ function BaziForm({
     month: string;
     day: string;
     hour: string;
+    minute: string;
     gender: 'male' | 'female';
     calendar: 'solar' | 'lunar';
     trueSolar: string;
@@ -236,6 +222,7 @@ function BaziForm({
   const [month, setMonth] = useState('8');
   const [day, setDay] = useState('15');
   const [hour, setHour] = useState('14');
+  const [minute, setMinute] = useState('0');
   const [userNotes, setUserNotes] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -246,6 +233,7 @@ function BaziForm({
       month,
       day,
       hour,
+      minute,
       gender,
       calendar,
       trueSolar,
@@ -346,12 +334,33 @@ function BaziForm({
           </div>
         </div>
 
-        {/* 年/月/日/時辰 四欄網格 */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-2">
+        {/* 出生日期：年/月/日 */}
+        <div className="grid grid-cols-3 gap-2">
           <SelectField label="出生年" value={year} onChange={setYear} options={range(1940, 2026, '年')} />
           <SelectField label="出生月" value={month} onChange={setMonth} options={range(1, 12, '月')} />
           <SelectField label="出生日" value={day} onChange={setDay} options={range(1, 31, '日')} />
-          <SelectField label="時辰" value={hour} onChange={setHour} options={SHICHEN} />
+        </div>
+
+        {/* 出生真實時間：小時與分鐘 */}
+        <div className="grid grid-cols-2 gap-2">
+          <SelectField
+            label="出生小時 (真實鐘表時)"
+            value={hour}
+            onChange={setHour}
+            options={Array.from({ length: 24 }, (_, i) => ({
+              value: String(i),
+              label: `${String(i).padStart(2, '0')} 時`,
+            }))}
+          />
+          <SelectField
+            label="出生分鐘"
+            value={minute}
+            onChange={setMinute}
+            options={Array.from({ length: 60 }, (_, i) => ({
+              value: String(i),
+              label: `${String(i).padStart(2, '0')} 分`,
+            }))}
+          />
         </div>
 
         {/* 真太陽時校正 */}
@@ -382,7 +391,7 @@ function BaziForm({
           className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-3 text-sm font-medium text-slate-950 shadow-lg shadow-amber-500/10 transition-all hover:bg-amber-400 active:bg-amber-600 disabled:opacity-70"
         >
           <Sparkles className="size-4" />
-          {loading ? '排盤中…' : '立即排盤'}
+          {loading ? '排盤中…' : '書籍比對與聯合排盤'}
         </button>
       </div>
     </form>
@@ -668,6 +677,7 @@ export default function Page() {
     month: string;
     day: string;
     hour: string;
+    minute: string;
     gender: 'male' | 'female';
     userNotes: string;
   }) => {
@@ -678,7 +688,8 @@ export default function Page() {
         Number(formData.month),
         Number(formData.day),
         Number(formData.hour),
-        formData.gender
+        formData.gender,
+        Number(formData.minute)
       );
       setBaziData(result);
       setUserNotes(formData.userNotes);
@@ -722,7 +733,7 @@ export default function Page() {
                 </span>
                 <div className="flex flex-col gap-0.5">
                   <p className="font-serif text-base font-medium text-slate-200">等待排盤</p>
-                  <p className="max-w-xs text-xs text-slate-400">填寫左側命主資料並點擊「立即排盤」，命盤結果將顯示於此。</p>
+                  <p className="max-w-xs text-xs text-slate-400">填寫左側命主資料並點擊「書籍比對與聯合排盤」，命盤結果將顯示於此。</p>
                 </div>
               </div>
             )}
