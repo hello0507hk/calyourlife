@@ -594,7 +594,7 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
             <span className="text-xs font-medium tracking-widest uppercase">AI 命理分析</span>
           </div>
           <h2 className="font-serif text-lg font-medium text-slate-100">AI 命盤總結報告</h2>
-          <p className="text-xs text-slate-400 print:hidden">結合四柱、藏干、十神與大運走勢，由 DeepSeek + Qwen + Gemini 聯合會診生成個人化深度解讀。</p>
+          <p className="text-xs text-slate-400 print:hidden">結合四柱、藏干、十神與大運走勢，由為你生成個人化詳細命書。</p>
         </div>
 
         {/* 列印與儲存 PDF 操作按鈕 */}
