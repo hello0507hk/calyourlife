@@ -176,31 +176,121 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
       {/* 主內容區塊 */}
       <div className="relative z-10 flex max-w-4xl flex-col items-center px-6 py-12 text-center">
         
-        {/* 玄學意境圖形 (太極八卦星空盤) */}
+        {/* 玄學意境圖形 (八卦羅盤太極徽標) */}
         <div className="relative mb-10 flex items-center justify-center">
-          {/* 外圍旋轉星環 */}
-          <div className="absolute size-72 animate-[spin_60s_linear_infinite] rounded-full border border-amber-500/20 sm:size-96" />
-          <div className="absolute size-56 animate-[spin_40s_linear_infinite_reverse] rounded-full border border-dashed border-amber-400/30 sm:size-72" />
-          
-          {/* 核心太極陰陽圖案容器 */}
-          <div className="relative flex size-44 items-center justify-center rounded-full bg-gradient-to-b from-slate-900 to-slate-950 p-2 shadow-2xl shadow-amber-500/20 border border-amber-500/40 sm:size-56">
-            <svg className="size-32 text-amber-400 sm:size-40" viewBox="0 0 100 100" fill="currentColor">
-              {/* 外圈干支八卦飾邊 */}
-              <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="2,4" opacity="0.6" />
-              <circle cx="50" cy="50" r="44" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.8" />
-              
-              {/* 太極兩儀 */}
-              <path d="M50,6 A44,44 0 0,1 50,94 A22,22 0 0,1 50,50 A22,22 0 0,0 50,6 Z" fill="currentColor" />
-              <path d="M50,94 A44,44 0 0,1 50,6 A22,22 0 0,0 50,50 A22,22 0 0,1 50,94 Z" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.4" />
-              
-              {/* 陰陽眼 */}
-              <circle cx="50" cy="28" r="6" fill="#020617" />
-              <circle cx="50" cy="72" r="6" fill="currentColor" />
+          {/* 外層慢速旋轉星軌環 */}
+          <div className="absolute size-80 animate-[spin_80s_linear_infinite] rounded-full border border-amber-500/15 sm:size-[380px]" />
+          <div className="absolute size-72 animate-[spin_50s_linear_infinite_reverse] rounded-full border border-dashed border-amber-400/25 sm:size-80" />
+          <div className="absolute size-60 animate-[ping_4s_cubic-bezier(0,0,0.2,1)_infinite] rounded-full border border-amber-500/10" />
+
+          {/* 羅盤核心徽標 */}
+          <div className="relative flex size-52 sm:size-64 items-center justify-center rounded-full bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 p-3 shadow-[0_0_50px_rgba(245,158,11,0.25)] border border-amber-500/50 backdrop-blur-xl">
+            <svg className="size-full text-amber-400" viewBox="0 0 200 200" fill="none">
+              <defs>
+                {/* 古金光澤漸層 */}
+                <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#fef3c7" />
+                  <stop offset="50%" stopColor="#f59e0b" />
+                  <stop offset="100%" stopColor="#b45309" />
+                </linearGradient>
+                
+                <radialGradient id="glowPool" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.25" />
+                  <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
+                </radialGradient>
+
+                {/* 爻線模組：陽爻 (實線) 與 陰爻 (斷線) */}
+                <g id="yang">
+                  <rect x="-14" y="-2" width="28" height="3.5" rx="1" fill="url(#goldGrad)" />
+                </g>
+                <g id="yin">
+                  <rect x="-14" y="-2" width="12" height="3.5" rx="1" fill="url(#goldGrad)" />
+                  <rect x="2" y="-2" width="12" height="3.5" rx="1" fill="url(#goldGrad)" />
+                </g>
+              </defs>
+
+              {/* 背景池光 */}
+              <circle cx="100" cy="100" r="95" fill="url(#glowPool)" />
+
+              {/* 羅盤刻度外圈 */}
+              <circle cx="100" cy="100" r="92" stroke="url(#goldGrad)" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="1.5, 4.5" />
+              <circle cx="100" cy="100" r="86" stroke="url(#goldGrad)" strokeWidth="1.5" strokeOpacity="0.7" />
+
+              {/* 古文方位註記 */}
+              <text x="100" y="21" textAnchor="middle" fill="url(#goldGrad)" fontSize="8.5" fontFamily="serif" fontWeight="bold" letterSpacing="1">天 · 乾</text>
+              <text x="100" y="186" textAnchor="middle" fill="url(#goldGrad)" fontSize="8.5" fontFamily="serif" fontWeight="bold" letterSpacing="1">地 · 坤</text>
+              <text x="17" y="103" textAnchor="middle" fill="url(#goldGrad)" fontSize="8.5" fontFamily="serif" fontWeight="bold">離</text>
+              <text x="183" y="103" textAnchor="middle" fill="url(#goldGrad)" fontSize="8.5" fontFamily="serif" fontWeight="bold">坎</text>
+
+              {/* 先天八卦陣列 */}
+              {/* 1. 乾 ☰ (正上方 - 0°) */}
+              <g transform="translate(100, 31)">
+                <use href="#yang" y="-6" />
+                <use href="#yang" y="0" />
+                <use href="#yang" y="6" />
+              </g>
+              {/* 2. 兌 ☱ (右上 - 45°) */}
+              <g transform="translate(100, 100) rotate(45) translate(0, -69)">
+                <use href="#yin" y="-6" />
+                <use href="#yang" y="0" />
+                <use href="#yang" y="6" />
+              </g>
+              {/* 3. 離 ☲ (正右 - 90°) */}
+              <g transform="translate(100, 100) rotate(90) translate(0, -69)">
+                <use href="#yang" y="-6" />
+                <use href="#yin" y="0" />
+                <use href="#yang" y="6" />
+              </g>
+              {/* 4. 震 ☳ (右下 - 135°) */}
+              <g transform="translate(100, 100) rotate(135) translate(0, -69)">
+                <use href="#yin" y="-6" />
+                <use href="#yin" y="0" />
+                <use href="#yang" y="6" />
+              </g>
+              {/* 5. 坤 ☷ (正下方 - 180°) */}
+              <g transform="translate(100, 100) rotate(180) translate(0, -69)">
+                <use href="#yin" y="-6" />
+                <use href="#yin" y="0" />
+                <use href="#yin" y="6" />
+              </g>
+              {/* 6. 巽 ☴ (左下 - 225°) */}
+              <g transform="translate(100, 100) rotate(225) translate(0, -69)">
+                <use href="#yang" y="-6" />
+                <use href="#yang" y="0" />
+                <use href="#yin" y="6" />
+              </g>
+              {/* 7. 坎 ☵ (正左 - 270°) */}
+              <g transform="translate(100, 100) rotate(270) translate(0, -69)">
+                <use href="#yin" y="-6" />
+                <use href="#yang" y="0" />
+                <use href="#yin" y="6" />
+              </g>
+              {/* 8. 艮 ☶ (左上 - 315°) */}
+              <g transform="translate(100, 100) rotate(315) translate(0, -69)">
+                <use href="#yang" y="-6" />
+                <use href="#yin" y="0" />
+                <use href="#yin" y="6" />
+              </g>
+
+              {/* 內圈雙金環 */}
+              <circle cx="100" cy="100" r="54" stroke="url(#goldGrad)" strokeWidth="1" opacity="0.6" />
+              <circle cx="100" cy="100" r="50" stroke="url(#goldGrad)" strokeWidth="1.5" />
+
+              {/* 中央陰陽太極圖 */}
+              <g>
+                <circle cx="100" cy="100" r="48" fill="#020617" />
+                <path
+                  d="M 100 52 A 48 48 0 0 1 100 148 A 24 24 0 0 1 100 100 A 24 24 0 0 0 100 52 Z"
+                  fill="url(#goldGrad)"
+                />
+                <circle cx="100" cy="76" r="5.5" fill="#020617" />
+                <circle cx="100" cy="124" r="5.5" fill="url(#goldGrad)" />
+              </g>
             </svg>
           </div>
         </div>
 
-        {/* 網站小標 */}
+        {/* 標籤 */}
         <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs font-medium tracking-widest text-amber-300 backdrop-blur">
           <Sparkles className="size-3.5 text-amber-400" />
           正宗子平八字 · 天文真太陽時 · 多模型 AI 聯合會診
@@ -213,7 +303,7 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
           </span>
         </h1>
 
-        {/* 玄學關聯字句點綴 */}
+        {/* 玄學字句 */}
         <p className="max-w-2xl font-serif text-lg leading-relaxed text-amber-200/90 sm:text-xl">
           「天地玄黃，陰陽相生；四柱八字，藏一生通變之理。」
         </p>
@@ -236,7 +326,7 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
           </button>
         </div>
 
-        {/* 頁尾特點說明 */}
+        {/* 頁尾特點 */}
         <div className="mt-16 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-500">
           <span className="flex items-center gap-1.5"><Compass className="size-3.5 text-amber-500/70" /> 子平正宗排盤</span>
           <span>•</span>
@@ -289,7 +379,6 @@ const range = (start: number, end: number, suffix: string) =>
     return { value: String(n), label: `${n}${suffix}` };
   });
 
-// 地區與經度映射選項
 const LOCATION_OPTIONS = [
   { value: '114.17', label: '香港 (東經 114.17°)' },
   { value: '113.54', label: '澳門 (東經 113.54°)' },
@@ -792,7 +881,7 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
 /* ------------------------------------------------------------------ */
 
 export default function Page() {
-  const [hasEntered, setHasEntered] = useState(false); // 首頁進入狀態
+  const [hasEntered, setHasEntered] = useState(false);
   const [baziData, setBaziData] = useState<BaziResult | null>(null);
   const [userNotes, setUserNotes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -826,7 +915,6 @@ export default function Page() {
     }, 300);
   };
 
-  // 若尚未點擊「進入」，顯示玄學風格首頁
   if (!hasEntered) {
     return <LandingPage onEnter={() => setHasEntered(true)} />;
   }
@@ -839,7 +927,7 @@ export default function Page() {
     <main className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-950 text-slate-100 selection:bg-amber-500/30 selection:text-amber-200 print:bg-white print:text-black">
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
         
-        {/* 頂部導航導覽列 (包含返回首頁按鈕) */}
+        {/* 頂部導覽列 */}
         <header className="mb-6 flex items-center justify-between border-b border-slate-800/80 pb-4 print:hidden">
           <div className="flex items-center gap-2.5">
             <span className="inline-flex size-9 items-center justify-center rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
