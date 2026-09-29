@@ -18,12 +18,16 @@ import {
   Calendar as CalendarIcon,
   Printer,
   FileDown,
+  Clock,
+  ArrowRight,
+  Home,
 } from 'lucide-react';
 
-// 補足因 bazi.js 轉為純 JS 後缺少的型別定義
+// 補足命盤型別定義
 export interface BaziResult {
   solarDate: string;
   lunarDate: string;
+  trueSolarText?: string;
   dayGan: string;
   dayGanWuxing: string;
   eightChar: {
@@ -158,6 +162,95 @@ function mapBaziToLuck(dayyun: BaziResult['dayyun']): LuckPeriod[] {
 }
 
 /* ------------------------------------------------------------------ */
+/* 首頁 Landing Page 組件                                              */
+/* ------------------------------------------------------------------ */
+
+function LandingPage({ onEnter }: { onEnter: () => void }) {
+  return (
+    <div className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-slate-950 text-slate-100 selection:bg-amber-500/30 selection:text-amber-200">
+      {/* 背景深邃光暈裝飾 */}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-amber-500/10 via-slate-950/80 to-slate-950" />
+      <div className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 size-[650px] rounded-full bg-amber-500/10 blur-[130px]" />
+      <div className="pointer-events-none absolute -bottom-40 left-1/2 -translate-x-1/2 size-[550px] rounded-full bg-blue-600/10 blur-[130px]" />
+
+      {/* 主內容區塊 */}
+      <div className="relative z-10 flex max-w-4xl flex-col items-center px-6 py-12 text-center">
+        
+        {/* 玄學意境圖形 (太極八卦星空盤) */}
+        <div className="relative mb-10 flex items-center justify-center">
+          {/* 外圍旋轉星環 */}
+          <div className="absolute size-72 animate-[spin_60s_linear_infinite] rounded-full border border-amber-500/20 sm:size-96" />
+          <div className="absolute size-56 animate-[spin_40s_linear_infinite_reverse] rounded-full border border-dashed border-amber-400/30 sm:size-72" />
+          
+          {/* 核心太極陰陽圖案容器 */}
+          <div className="relative flex size-44 items-center justify-center rounded-full bg-gradient-to-b from-slate-900 to-slate-950 p-2 shadow-2xl shadow-amber-500/20 border border-amber-500/40 sm:size-56">
+            <svg className="size-32 text-amber-400 sm:size-40" viewBox="0 0 100 100" fill="currentColor">
+              {/* 外圈干支八卦飾邊 */}
+              <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="2,4" opacity="0.6" />
+              <circle cx="50" cy="50" r="44" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.8" />
+              
+              {/* 太極兩儀 */}
+              <path d="M50,6 A44,44 0 0,1 50,94 A22,22 0 0,1 50,50 A22,22 0 0,0 50,6 Z" fill="currentColor" />
+              <path d="M50,94 A44,44 0 0,1 50,6 A22,22 0 0,0 50,50 A22,22 0 0,1 50,94 Z" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.4" />
+              
+              {/* 陰陽眼 */}
+              <circle cx="50" cy="28" r="6" fill="#020617" />
+              <circle cx="50" cy="72" r="6" fill="currentColor" />
+            </svg>
+          </div>
+        </div>
+
+        {/* 網站小標 */}
+        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs font-medium tracking-widest text-amber-300 backdrop-blur">
+          <Sparkles className="size-3.5 text-amber-400" />
+          正宗子平八字 · 天文真太陽時 · 多模型 AI 聯合會診
+        </div>
+
+        {/* 主標題 */}
+        <h1 className="mb-4 font-serif text-5xl font-medium tracking-tight text-slate-100 sm:text-7xl">
+          <span className="bg-gradient-to-r from-amber-100 via-amber-300 to-amber-500 bg-clip-text text-transparent">
+            算命網
+          </span>
+        </h1>
+
+        {/* 玄學關聯字句點綴 */}
+        <p className="max-w-2xl font-serif text-lg leading-relaxed text-amber-200/90 sm:text-xl">
+          「天地玄黃，陰陽相生；四柱八字，藏一生通變之理。」
+        </p>
+
+        <p className="mt-4 max-w-xl font-serif text-xs leading-relaxed text-slate-400 sm:text-sm">
+          洞察天干地支之生克，推演五行旺衰與大運走勢。
+          深得《滴天髓》、《造化元鑰》、《神峰通考》與《子平一得》之真傳，
+          知命順勢，趨吉避凶。
+        </p>
+
+        {/* 進入按鈕 */}
+        <div className="mt-10">
+          <button
+            type="button"
+            onClick={onEnter}
+            className="group relative inline-flex items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-9 py-4 font-serif text-lg font-semibold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.3)] transition-all duration-300 hover:scale-105 hover:shadow-[0_0_45px_rgba(245,158,11,0.5)] active:scale-95"
+          >
+            <span>進入命盤排盤</span>
+            <ArrowRight className="size-5 transition-transform duration-300 group-hover:translate-x-1" />
+          </button>
+        </div>
+
+        {/* 頁尾特點說明 */}
+        <div className="mt-16 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-500">
+          <span className="flex items-center gap-1.5"><Compass className="size-3.5 text-amber-500/70" /> 子平正宗排盤</span>
+          <span>•</span>
+          <span className="flex items-center gap-1.5"><Clock className="size-3.5 text-amber-500/70" /> 經度與天文均時差校正</span>
+          <span>•</span>
+          <span className="flex items-center gap-1.5"><WandSparkles className="size-3.5 text-amber-500/70" /> Gemini / DeepSeek / Qwen / Grok 四 AI 會診</span>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* 表單組件                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -196,6 +289,18 @@ const range = (start: number, end: number, suffix: string) =>
     return { value: String(n), label: `${n}${suffix}` };
   });
 
+// 地區與經度映射選項
+const LOCATION_OPTIONS = [
+  { value: '114.17', label: '香港 (東經 114.17°)' },
+  { value: '113.54', label: '澳門 (東經 113.54°)' },
+  { value: '121.50', label: '台北 (東經 121.50°)' },
+  { value: '116.40', label: '北京 (東經 116.40°)' },
+  { value: '121.47', label: '上海 (東經 121.47°)' },
+  { value: '113.26', label: '廣州 (東經 113.26°)' },
+  { value: '114.05', label: '深圳 (東經 114.05°)' },
+  { value: '103.81', label: '新加坡 (東經 103.81°)' },
+];
+
 function BaziForm({
   onSubmit,
   loading,
@@ -210,6 +315,7 @@ function BaziForm({
     gender: 'male' | 'female';
     calendar: 'solar' | 'lunar';
     trueSolar: string;
+    longitude: string;
     userNotes: string;
   }) => void;
   loading: boolean;
@@ -218,6 +324,7 @@ function BaziForm({
   const [gender, setGender] = useState<'male' | 'female'>('male');
   const [calendar, setCalendar] = useState<'solar' | 'lunar'>('solar');
   const [trueSolar, setTrueSolar] = useState('on');
+  const [longitude, setLongitude] = useState('114.17');
   const [year, setYear] = useState('1995');
   const [month, setMonth] = useState('8');
   const [day, setDay] = useState('15');
@@ -237,6 +344,7 @@ function BaziForm({
       gender,
       calendar,
       trueSolar,
+      longitude,
       userNotes: userNotes.trim(),
     });
   };
@@ -363,16 +471,26 @@ function BaziForm({
           />
         </div>
 
-        {/* 真太陽時校正 */}
-        <SelectField
-          label="真太陽時校正"
-          value={trueSolar}
-          onChange={setTrueSolar}
-          options={[
-            { value: 'on', label: '開啟（依出生地經度校正時差）' },
-            { value: 'off', label: '關閉（使用平太陽標準時）' },
-          ]}
-        />
+        {/* 真太陽時校正與經度選單 */}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <SelectField
+            label="真太陽時校正"
+            value={trueSolar}
+            onChange={setTrueSolar}
+            options={[
+              { value: 'on', label: '開啟真太陽時' },
+              { value: 'off', label: '關閉 (平太陽時)' },
+            ]}
+          />
+          {trueSolar === 'on' && (
+            <SelectField
+              label="出生地區 (經度時差)"
+              value={longitude}
+              onChange={setLongitude}
+              options={LOCATION_OPTIONS}
+            />
+          )}
+        </div>
 
         <label className="flex flex-col gap-1.5 w-full">
           <span className="text-xs font-medium text-slate-400">個人背景 / 特質提問（選填）</span>
@@ -411,10 +529,17 @@ function GlyphBlock({ char, element, caption }: { char: string; element: Element
   );
 }
 
-function FourPillars({ pillars }: { pillars: Pillar[] }) {
+function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarText?: string }) {
   return (
-    <section>
-      <div className="mb-3 flex items-baseline justify-between">
+    <section className="flex flex-col gap-3">
+      {trueSolarText && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-xs font-medium text-amber-300">
+          <Clock className="size-4 shrink-0 text-amber-400" />
+          <span>{trueSolarText}</span>
+        </div>
+      )}
+
+      <div className="flex items-baseline justify-between">
         <h2 className="font-serif text-xl font-medium text-slate-100">四柱八字</h2>
         <span className="text-xs text-slate-400">天干 · 地支 · 十神</span>
       </div>
@@ -606,7 +731,6 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
           <p className="text-xs text-slate-400 print:hidden">結合四柱、藏干、十神與大運走勢，由為你生成個人化詳細命書。</p>
         </div>
 
-        {/* 列印與儲存 PDF 操作按鈕 */}
         {report && (
           <div className="flex items-center gap-2 print:hidden shrink-0">
             <button
@@ -668,6 +792,7 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
 /* ------------------------------------------------------------------ */
 
 export default function Page() {
+  const [hasEntered, setHasEntered] = useState(false); // 首頁進入狀態
   const [baziData, setBaziData] = useState<BaziResult | null>(null);
   const [userNotes, setUserNotes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -679,6 +804,8 @@ export default function Page() {
     hour: string;
     minute: string;
     gender: 'male' | 'female';
+    trueSolar: string;
+    longitude: string;
     userNotes: string;
   }) => {
     setLoading(true);
@@ -689,13 +816,20 @@ export default function Page() {
         Number(formData.day),
         Number(formData.hour),
         formData.gender,
-        Number(formData.minute)
+        Number(formData.minute),
+        formData.trueSolar === 'on',
+        Number(formData.longitude)
       );
       setBaziData(result);
       setUserNotes(formData.userNotes);
       setLoading(false);
     }, 300);
   };
+
+  // 若尚未點擊「進入」，顯示玄學風格首頁
+  if (!hasEntered) {
+    return <LandingPage onEnter={() => setHasEntered(true)} />;
+  }
 
   const pillars = baziData ? mapBaziToPillars(baziData) : [];
   const distribution = baziData ? mapBaziToDistribution(baziData.wuxingCounts) : [];
@@ -704,14 +838,27 @@ export default function Page() {
   return (
     <main className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-950 text-slate-100 selection:bg-amber-500/30 selection:text-amber-200 print:bg-white print:text-black">
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
-        <header className="mb-6 flex flex-col items-center gap-2 text-center print:hidden">
-          <span className="inline-flex size-10 items-center justify-center rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
-            <Compass className="size-5" />
-          </span>
-          <h1 className="font-serif text-2xl font-medium tracking-tight text-slate-100 sm:text-3xl">八字排盤網站</h1>
-          <p className="max-w-md text-xs leading-relaxed text-slate-400">
-            輸入出生資訊，推演四柱八字、五行藏干與大運走勢，並由 AI 生成專屬命理報告。
-          </p>
+        
+        {/* 頂部導航導覽列 (包含返回首頁按鈕) */}
+        <header className="mb-6 flex items-center justify-between border-b border-slate-800/80 pb-4 print:hidden">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex size-9 items-center justify-center rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
+              <Compass className="size-5" />
+            </span>
+            <div>
+              <h1 className="font-serif text-xl font-medium tracking-tight text-slate-100 sm:text-2xl">算命網</h1>
+              <p className="text-[10px] text-slate-400">四柱八字 · 典籍比對 · AI 會診</p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setHasEntered(false)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-amber-500/40 hover:text-amber-300"
+          >
+            <Home className="size-3.5 text-slate-400" />
+            回首頁
+          </button>
         </header>
 
         <div className="grid w-full min-w-0 gap-6 lg:grid-cols-[340px_1fr]">
@@ -722,7 +869,7 @@ export default function Page() {
           <div className="w-full min-w-0">
             {baziData ? (
               <div className="flex w-full min-w-0 flex-col gap-5">
-                <FourPillars pillars={pillars} />
+                <FourPillars pillars={pillars} trueSolarText={baziData.trueSolarText} />
                 <PillarDetails pillars={pillars} distribution={distribution} luck={luck} />
                 <AiAnalysis baziData={baziData} userNotes={userNotes} />
               </div>
