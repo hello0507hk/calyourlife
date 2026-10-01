@@ -536,7 +536,7 @@ function BaziForm({
 function GlyphBlock({ char, element, caption }: { char: string; element: Element; caption: string }) {
   const s = ELEMENT_STYLE[element];
   return (
-    <div className={`flex flex-col items-center gap-0.5 rounded-xl border ${s.border} ${s.bg} px-2 py-2.5`}>
+    <div className={`flex flex-col items-center justify-center gap-0.5 rounded-xl border ${s.border} ${s.bg} px-2 py-2.5 shrink-0`}>
       <span className={`font-serif text-2xl font-bold leading-none sm:text-3xl ${s.text}`}>{char}</span>
       <span className={`text-[10px] font-medium ${s.text}`}>
         {caption}{ELEMENT_LABEL[element]}
@@ -546,7 +546,7 @@ function GlyphBlock({ char, element, caption }: { char: string; element: Element
 }
 
 /* ------------------------------------------------------------------ */
-/* 四柱八字 ＋ 藏干十神 (完美等高對齊：年柱 ➔ 月柱 ➔ 日柱 ➔ 時柱)         */
+/* 四柱八字 ＋ 藏干十神 (嚴格行列精確對齊：年柱 ➔ 月柱 ➔ 日柱 ➔ 時柱)     */
 /* ------------------------------------------------------------------ */
 
 function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarText?: string }) {
@@ -564,12 +564,12 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
         <span className="text-xs text-slate-400">（右起：年柱 ➔ 月柱 ➔ 日柱 ➔ 時柱）</span>
       </div>
 
-      {/* 使用 flex-row-reverse 穩定佈局 */}
-      <div className="flex flex-col gap-2.5 sm:flex-row-reverse sm:gap-3">
+      {/* 使用 sm:flex-row-reverse 佈局，並加上項防拉伸控制 */}
+      <div className="flex flex-col gap-2.5 sm:flex-row-reverse sm:gap-3 items-stretch">
         {pillars.map((p) => {
           const isDay = p.key === 'day';
           
-          // 補足為固定的 3 個槽位，使四張卡片完美等高對齊
+          // 統一固定 3 個槽位，防高度落差
           const slots = [...p.hiddenStems];
           while (slots.length < 3) {
             slots.push({ char: '', element: 'earth', god: '' });
@@ -578,12 +578,12 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
           return (
             <article
               key={p.key}
-              className={`flex flex-1 flex-col justify-start rounded-2xl border bg-slate-900/90 p-3.5 shadow-xl transition-all ${
+              className={`flex flex-1 flex-col items-stretch rounded-2xl border bg-slate-900/90 p-3.5 shadow-xl transition-all ${
                 isDay ? 'border-amber-500/80 ring-1 ring-amber-500/30' : 'border-slate-800'
               }`}
             >
-              {/* 標題：柱名與宮位 */}
-              <header className="mb-2.5 flex items-center justify-between border-b border-slate-800/80 pb-2">
+              {/* 第 1 行：柱名與宮位標題 */}
+              <header className="mb-2.5 flex h-7 items-center justify-between border-b border-slate-800/80 pb-2 shrink-0">
                 <div className="flex items-center gap-1.5">
                   <h3 className="font-serif text-base font-bold text-slate-100">{p.label}</h3>
                   {isDay && (
@@ -595,18 +595,18 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
                 <span className="text-[10px] text-slate-400">{p.sublabel}</span>
               </header>
 
-              {/* 天干地支 */}
-              <div className="flex flex-col gap-2">
-                {/* 天干 */}
-                <div className="relative">
+              {/* 天干與地支 (嚴格防拉伸) */}
+              <div className="flex flex-col gap-2 shrink-0">
+                {/* 第 2 行：天干 */}
+                <div className="relative shrink-0">
                   <GlyphBlock char={p.heavenlyStem} element={p.heavenlyElement} caption="天干 · " />
                   <span className="absolute top-1.5 right-1.5 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400 border border-amber-500/30 shadow-sm">
                     {p.heavenlyTenGod}
                   </span>
                 </div>
 
-                {/* 地支 */}
-                <div className="relative">
+                {/* 第 3 行：地支 */}
+                <div className="relative shrink-0">
                   <GlyphBlock char={p.earthlyBranch} element={p.earthlyElement} caption="地支 · " />
                   <span className="absolute top-1.5 right-1.5 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300 border border-slate-700/50 shadow-sm">
                     {p.earthlyTenGod}
@@ -614,19 +614,18 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
                 </div>
               </div>
 
-              {/* 藏干與十神列表（3 槽位均勻高排列） */}
-              <div className="mt-3 border-t border-slate-800/80 pt-2.5">
+              {/* 第 4 行：藏干與十神列表 */}
+              <div className="mt-3 border-t border-slate-800/80 pt-2 shrink-0">
                 <div className="mb-1.5 text-[10px] font-medium text-slate-400 text-center">
                   藏干 · 十神
                 </div>
                 <div className="flex flex-col gap-1">
                   {slots.map((h, i) => {
                     if (!h.char) {
-                      // 透明占位槽位，維護整體等高
                       return (
                         <div
                           key={i}
-                          className="flex h-[26px] items-center justify-between rounded-lg border border-transparent bg-transparent px-2 py-1"
+                          className="flex h-7 shrink-0 items-center justify-between rounded-lg border border-transparent bg-transparent px-2 py-1"
                         />
                       );
                     }
@@ -634,7 +633,7 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
                     return (
                       <div
                         key={i}
-                        className={`flex h-[26px] items-center justify-between rounded-lg border ${s.border} ${s.bg} px-2 py-1 transition-colors`}
+                        className={`flex h-7 shrink-0 items-center justify-between rounded-lg border ${s.border} ${s.bg} px-2 py-1 transition-colors`}
                       >
                         <div className="flex items-center gap-1">
                           <span className={`font-serif text-xs font-bold ${s.text}`}>{h.char}</span>
