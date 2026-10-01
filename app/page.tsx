@@ -5,7 +5,6 @@ import { calculateBazi } from '@/lib/bazi';
 import {
   ChevronDown,
   Compass,
-  Layers,
   Mars,
   Moon,
   PieChart,
@@ -23,7 +22,7 @@ import {
   Home,
 } from 'lucide-react';
 
-// 補足命盤型別定義
+// 命盤型別定義
 export interface BaziResult {
   solarDate: string;
   lunarDate: string;
@@ -168,21 +167,16 @@ function mapBaziToLuck(dayyun: BaziResult['dayyun']): LuckPeriod[] {
 function LandingPage({ onEnter }: { onEnter: () => void }) {
   return (
     <div className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-slate-950 text-slate-100 selection:bg-amber-500/30 selection:text-amber-200">
-      {/* 背景深邃光暈裝飾 */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-amber-500/10 via-slate-950/80 to-slate-950" />
       <div className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 size-[650px] rounded-full bg-amber-500/10 blur-[130px]" />
       <div className="pointer-events-none absolute -bottom-40 left-1/2 -translate-x-1/2 size-[550px] rounded-full bg-blue-600/10 blur-[130px]" />
 
-      {/* 主內容區塊 */}
       <div className="relative z-10 flex max-w-4xl flex-col items-center px-6 py-12 text-center">
-        
-        {/* 玄學意境圖形 (八卦羅盤太極徽標) */}
         <div className="relative mb-10 flex items-center justify-center">
           <div className="absolute size-80 animate-[spin_80s_linear_infinite] rounded-full border border-amber-500/15 sm:size-[380px]" />
           <div className="absolute size-72 animate-[spin_50s_linear_infinite_reverse] rounded-full border border-dashed border-amber-400/25 sm:size-80" />
           <div className="absolute size-60 animate-[ping_4s_cubic-bezier(0,0,0.2,1)_infinite] rounded-full border border-amber-500/10" />
 
-          {/* 羅盤核心徽標 */}
           <div className="relative flex size-52 sm:size-64 items-center justify-center rounded-full bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 p-3 shadow-[0_0_50px_rgba(245,158,11,0.25)] border border-amber-500/50 backdrop-blur-xl">
             <svg className="size-full text-amber-400" viewBox="0 0 200 200" fill="none">
               <defs>
@@ -191,31 +185,23 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
                   <stop offset="50%" stopColor="#f59e0b" />
                   <stop offset="100%" stopColor="#b45309" />
                 </linearGradient>
-                
                 <radialGradient id="glowPool" cx="50%" cy="50%" r="50%">
                   <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.25" />
                   <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
                 </radialGradient>
-
-                <g id="yang">
-                  <rect x="-14" y="-2" width="28" height="3.5" rx="1" fill="url(#goldGrad)" />
-                </g>
-                <g id="yin">
-                  <rect x="-14" y="-2" width="12" height="3.5" rx="1" fill="url(#goldGrad)" />
-                  <rect x="2" y="-2" width="12" height="3.5" rx="1" fill="url(#goldGrad)" />
-                </g>
+                <g id="yang"><rect x="-14" y="-2" width="28" height="3.5" rx="1" fill="url(#goldGrad)" /></g>
+                <g id="yin"><rect x="-14" y="-2" width="12" height="3.5" rx="1" fill="url(#goldGrad)" /><rect x="2" y="-2" width="12" height="3.5" rx="1" fill="url(#goldGrad)" /></g>
               </defs>
 
               <circle cx="100" cy="100" r="95" fill="url(#glowPool)" />
               <circle cx="100" cy="100" r="92" stroke="url(#goldGrad)" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="1.5, 4.5" />
               <circle cx="100" cy="100" r="86" stroke="url(#goldGrad)" strokeWidth="1.5" strokeOpacity="0.7" />
 
-              <text x="100" y="21" textAnchor="middle" fill="url(#goldGrad)" fontSize="8.5" fontFamily="serif" fontWeight="bold" letterSpacing="1">天 · 乾</text>
-              <text x="100" y="186" textAnchor="middle" fill="url(#goldGrad)" fontSize="8.5" fontFamily="serif" fontWeight="bold" letterSpacing="1">地 · 坤</text>
+              <text x="100" y="21" textAnchor="middle" fill="url(#goldGrad)" fontSize="8.5" fontFamily="serif" fontWeight="bold">天 · 乾</text>
+              <text x="100" y="186" textAnchor="middle" fill="url(#goldGrad)" fontSize="8.5" fontFamily="serif" fontWeight="bold">地 · 坤</text>
               <text x="17" y="103" textAnchor="middle" fill="url(#goldGrad)" fontSize="8.5" fontFamily="serif" fontWeight="bold">離</text>
               <text x="183" y="103" textAnchor="middle" fill="url(#goldGrad)" fontSize="8.5" fontFamily="serif" fontWeight="bold">坎</text>
 
-              {/* 八卦爻象 */}
               <g transform="translate(100, 31)"><use href="#yang" y="-6" /><use href="#yang" y="0" /><use href="#yang" y="6" /></g>
               <g transform="translate(100, 100) rotate(45) translate(0, -69)"><use href="#yin" y="-6" /><use href="#yang" y="0" /><use href="#yang" y="6" /></g>
               <g transform="translate(100, 100) rotate(90) translate(0, -69)"><use href="#yang" y="-6" /><use href="#yin" y="0" /><use href="#yang" y="6" /></g>
@@ -277,7 +263,6 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
           <span>•</span>
           <span className="flex items-center gap-1.5"><WandSparkles className="size-3.5 text-amber-500/70" /> Gemini / DeepSeek / Qwen / Grok 四 AI 會診</span>
         </div>
-
       </div>
     </div>
   );
@@ -561,7 +546,7 @@ function GlyphBlock({ char, element, caption }: { char: string; element: Element
 }
 
 /* ------------------------------------------------------------------ */
-/* 四柱八字 ＋ 藏干十神 (合拼＋右至左 RTL 排版)                          */
+/* 四柱八字 ＋ 藏干十神 (完美等高對齊：年柱 ➔ 月柱 ➔ 日柱 ➔ 時柱)         */
 /* ------------------------------------------------------------------ */
 
 function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarText?: string }) {
@@ -576,23 +561,29 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
 
       <div className="flex items-baseline justify-between">
         <h2 className="font-serif text-xl font-medium text-slate-100">四柱八字 · 藏干十神</h2>
-        <span className="text-xs text-slate-400">（右起：年柱 → 月柱 → 日柱 → 時柱）</span>
+        <span className="text-xs text-slate-400">（右起：年柱 ➔ 月柱 ➔ 日柱 ➔ 時柱）</span>
       </div>
 
-      {/* dir="rtl" 使四柱由右至左排列 */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3" dir="rtl">
+      {/* 使用 flex-row-reverse 穩定佈局 */}
+      <div className="flex flex-col gap-2.5 sm:flex-row-reverse sm:gap-3">
         {pillars.map((p) => {
           const isDay = p.key === 'day';
+          
+          // 補足為固定的 3 個槽位，使四張卡片完美等高對齊
+          const slots = [...p.hiddenStems];
+          while (slots.length < 3) {
+            slots.push({ char: '', element: 'earth', god: '' });
+          }
+
           return (
             <article
               key={p.key}
-              dir="ltr"
-              className={`flex flex-col justify-between rounded-2xl border bg-slate-900/90 p-3 sm:p-4 shadow-xl transition-all ${
+              className={`flex flex-1 flex-col justify-start rounded-2xl border bg-slate-900/90 p-3.5 shadow-xl transition-all ${
                 isDay ? 'border-amber-500/80 ring-1 ring-amber-500/30' : 'border-slate-800'
               }`}
             >
-              {/* 卡片標題：柱名與宮位 */}
-              <header className="mb-2 flex items-center justify-between border-b border-slate-800/80 pb-2">
+              {/* 標題：柱名與宮位 */}
+              <header className="mb-2.5 flex items-center justify-between border-b border-slate-800/80 pb-2">
                 <div className="flex items-center gap-1.5">
                   <h3 className="font-serif text-base font-bold text-slate-100">{p.label}</h3>
                   {isDay && (
@@ -604,7 +595,7 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
                 <span className="text-[10px] text-slate-400">{p.sublabel}</span>
               </header>
 
-              {/* 天干與地支 */}
+              {/* 天干地支 */}
               <div className="flex flex-col gap-2">
                 {/* 天干 */}
                 <div className="relative">
@@ -623,18 +614,27 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
                 </div>
               </div>
 
-              {/* 藏干與十神列表 */}
+              {/* 藏干與十神列表（3 槽位均勻高排列） */}
               <div className="mt-3 border-t border-slate-800/80 pt-2.5">
                 <div className="mb-1.5 text-[10px] font-medium text-slate-400 text-center">
                   藏干 · 十神
                 </div>
                 <div className="flex flex-col gap-1">
-                  {p.hiddenStems.map((h, i) => {
+                  {slots.map((h, i) => {
+                    if (!h.char) {
+                      // 透明占位槽位，維護整體等高
+                      return (
+                        <div
+                          key={i}
+                          className="flex h-[26px] items-center justify-between rounded-lg border border-transparent bg-transparent px-2 py-1"
+                        />
+                      );
+                    }
                     const s = ELEMENT_STYLE[h.element];
                     return (
                       <div
                         key={i}
-                        className={`flex items-center justify-between rounded-lg border ${s.border} ${s.bg} px-2 py-1 transition-colors`}
+                        className={`flex h-[26px] items-center justify-between rounded-lg border ${s.border} ${s.bg} px-2 py-1 transition-colors`}
                       >
                         <div className="flex items-center gap-1">
                           <span className={`font-serif text-xs font-bold ${s.text}`}>{h.char}</span>
