@@ -7,6 +7,16 @@ export const dynamic = 'force-dynamic';
 // 2. 延長 Vercel 超時限制至 300 秒（Vercel Pro 帳號生效）
 export const maxDuration = 300;
 
+// 自動計算干支年份
+function getYearGanZhi(year: number): string {
+  const stems = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
+  const branches = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
+  const offset = year - 4;
+  const stem = stems[(offset % 10 + 10) % 10];
+  const branch = branches[(offset % 12 + 12) % 12];
+  return `${year} ${stem}${branch}年`;
+}
+
 // 自動計算天干五合
 function checkGanHe(gans: string[]) {
   const combinations = [
@@ -110,7 +120,7 @@ export async function POST(req: Request) {
   const executionErrors: Record<string, string> = {};
 
   try {
-    const { baziData, userNotes } = await req.json();
+    const { type = 'deep', baziData, userNotes, targetYear = 2026, question } = await req.json();
 
     const deepseekKey = process.env.DEEPSEEK_API_KEY?.trim();
     const dashscopeKey = process.env.QWEN_API_KEY?.trim();
@@ -132,13 +142,47 @@ export async function POST(req: Request) {
     }
 
     const formattedText = buildBaziText(baziData, userNotes);
+    const targetGanZhiStr = getYearGanZhi(targetYear);
 
-    const initialSystemPrompt = `你是一位跟隨徐樂吾學習八字多年、深得徐樂吾真傳，精通子平八字、「滴天髓徵義」徐樂吾編註、「造化元鑰」徐樂吾評註、神峰通考、徐樂吾的有殺先論殺和「子平一得」蔡進源補註的資深命理專家。利用滴天髓中的扶抑、調候、通關定格局與用捉用神的技術，造化元鑰中的十天干在不同月令的十天干喜忌，神峰通考中的病藥說和繼善編裡各種對命格的口訣，徐樂吾有殺先論殺如殺比日主弱，以財滋弱殺論，如殺比日主強，以殺印相生或食神制殺論、蔡進源補註「子平一得」中的命例來判斷八字格局高低，嚴禁使用朱鵲橋一派的任何理論來批算八字。
-請必定要完全根據使用者提供的已知八字數據，參考文檔，滴天髓徵義，造化元鑰，神峰通考，子平一得等書藉進行分析，嚴禁修改干支或自行重新計算排盤。
+    // 基於三大功能（deep / yearly / yearly_qa）動態選用系統提示詞與輸出格式規範
+    let initialSystemPrompt = '';
+    let userPromptText = '';
+
+    const baseExpertPersona = `你是一位跟隨徐樂吾學習八字多年、深得徐樂吾真傳，精通子平八字、「滴天髓徵義」徐樂吾編註、「造化元鑰」徐樂吾評註、神峰通考、徐樂吾的有殺先論殺和「子平一得」蔡進源補註的資深命理專家。利用滴天髓中的扶抑、調候、通關定格局與用捉用神的技術，造化元鑰中的十天干在不同月令的十天干喜忌，神峰通考中的病藥說和繼善編裡各種對命格的口訣，徐樂吾有殺先論殺如殺比日主弱，以財滋弱殺論，如殺比日主強，以殺印相生或食神制殺論、蔡進源補註「子平一得」中的命例來判斷八字格局高低，嚴禁使用朱鵲橋一派的任何理論來批算八字。
+請必定要完全根據使用者提供的已知八字數據，參考文檔，滴天髓徵義，造化元鑰，神峰通考，子平一得等書藉進行分析，嚴禁修改干支或自行重新計算排盤。`;
+
+    if (type === 'yearly') {
+      initialSystemPrompt = `${baseExpertPersona}
+
+【分析任務】：請針對命主八字進行【${targetGanZhiStr} 流年整體運勢解盤】。
+
+請嚴格分成以下六部分，並以 Markdown 格式輸出：
+### 一、 流年整體運勢總評（流年 ${targetGanZhiStr} 干支對日主、大運及原局八字之生剋制化與衝合會刑穿分析）
+### 二、 事業與工作運勢推演
+### 三、 財運走勢與投資理財風險分析
+### 四、 感情婚姻與人際關係吉凶
+### 五、 健康狀況與安全注意事項
+### 六、 全年吉凶月份提醒與趨吉避凶錦囊`;
+
+      userPromptText = `請幫我分析以下八字命盤在【${targetGanZhiStr}】的流年整體運勢：\n\n${formattedText}`;
+    } else if (type === 'yearly_qa') {
+      initialSystemPrompt = `${baseExpertPersona}
+
+【分析任務】：請針對命主於【${targetGanZhiStr}】提出之特定問題【${question || '流年吉凶問事'}】進行【流年問事精準解答】。
+
+請嚴格分成以下三部分，並以 Markdown 格式輸出：
+### 一、 針對問題之流年吉凶明確斷語（直指好壞、變動或順逆）
+### 二、 配合【${targetGanZhiStr}】流年干支與八字原局、大運之深層命理剖析
+### 三、 具體應對方針與趨吉避凶行動建議`;
+
+      userPromptText = `命主針對【${targetGanZhiStr}】提出了具體提問：【${question || '流年吉凶問事'}】\n\n請結合以下八字命盤數據解答：\n\n${formattedText}`;
+    } else {
+      // 預設為原局深度解盤
+      initialSystemPrompt = `${baseExpertPersona}
 
 【性別與感情婚姻批斷嚴格約束】：
 - 必須嚴格根據資料中的【命主性別】進行批斷，絕不可寫出「假設命主為男/女」或「假設」等字眼。
-- 若性別為「乾造（男）」，第四點感情婚姻必須直接以正財/偏財為妻星、日支為妻宮和參照內部參考法則和滴天髓徵命進行確切論述。
+- 若性別為「乾造（男）」，第四點感情婚姻必須直接以正財/偏財為妻星、日支為妻宮和參照內部參考法則和滴天髓徵義進行確切論述。
 - 若性別為「坤造（女）」，第四點感情婚姻必須直接參照內部參考法則和滴天髓徵義女命篇進行確切論述。
 
 【命理分析穩定性與一致性約束】：
@@ -147,24 +191,12 @@ export async function POST(req: Request) {
 3. 捉用神必須先參照造化元鑰中十天干在不同月令的喜忌，滴天髓補註中的命例，子平一得的命例，必須在原局八字中找出有用之神，不可用地支藏元做用神，五行雖弱，但仍可作用神，如果八字天干地支入面找不到有用之神，除非該五行在原局中被傷盡，否則都應在原局中捉用神，日元必須當令的情況下，才可在月令藏元中捉用神，否則需要判斷是否無用神。
 4. 喜忌之定義是生旺用神是喜神，八字之中有用之神為用神，忌神為尅用神之神，病為原局八字問題之處，藥神為醫治病的藥。
 
-流年運勢評語
-1. 必須跟據真實時間之年份來批算流年。
-
-批命報告格式
-1. 每次批命報告必須要以最專業、嚴謹和負責任的態度，詳盡分析命主的事業，感情和健康的好處與壞處，推斷將會發生的大事件，文字虛要以淺白易明為主，命書格式和內容每次分析都必須相同，以免出現同一用戶重覆批算相同命格，或不同命主批命時，會出現不同結果和格式。
-
-五行生尅
-- 木生火，火生土，土生金，金生水，水生木
-- 必須嚴格遵守用木忌金，用金忌火，用火忌水，用水忌土，用土忌木
-
 【參考文獻與指定批命規範】：
 --------------------------------------------------
 ${ADMIN_REFERENCE_DOCS}
 --------------------------------------------------
 
-請結合上述參考規範、使用者輸入的個人文檔與八字數據，進行專業推斷。
 內容請嚴格分成以下六部分，並以 Markdown 格式輸出：
-
 ### 一、 日主旺衰、論調候、天干合化、定格局、評論格局高低，捉用神，詳細指出原局八字中的「病」和「藥」
 - 分析日主在月令的得令狀況與四柱整體氣勢。分析原局八字時，首要條件是先論日主屬陰屬陽，然後才論五行生尅制化。先看命主是陽日元還是陰日元，陽日元喜尅不喜泄，要有根，陰日元喜泄不喜尅，不怕弱
 - 必定依據此次序批原局裡是否有調候，第二步是必須跟據造化元鑰裡面的十干性情，命主日元生在不同月令時，需要什麼五行來做用神，第三步是看天干是否有合化，可跟據蔡進源師傅對天干五合的理論，甲己合化土，乙庚合化金，丙辛合化水，丁壬合化木，戊癸合化火，以「逢合必化，只分真假」來判斷化神是否用神，忌神或是調候用神，可知對命局有沒有幫助。第四步如果有殺，則需要有殺先論殺，日主和殺相比，殺弱就以財滋殺，日主比殺弱，就必要用傷官或食神制殺，或用印化殺，但格局只有一種，判定為財滋弱殺就原能用食神，傷官制殺和用印化殺，如殺比日元旺，用食神傷官制殺，就不能用印化殺，用印化殺就不能用食神或傷官制殺
@@ -191,6 +223,9 @@ ${ADMIN_REFERENCE_DOCS}
 
 語氣請保持客觀、理性且富有建設性，避免過度武斷或誇大災禍。`;
 
+      userPromptText = `請幫我分析以下八字命盤數據，進行【原局深度解盤】：\n\n${formattedText}`;
+    }
+
     // ==================================================================
     // 第一階段：DeepSeek + Qwen + Grok 三 AI 平行同步初批 (Promise.all)
     // ==================================================================
@@ -209,7 +244,7 @@ ${ADMIN_REFERENCE_DOCS}
         top_p: 0.1,
         messages: [
           { role: 'system', content: initialSystemPrompt },
-          { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
+          { role: 'user', content: userPromptText },
         ],
       }),
     }).then(async (res) => {
@@ -239,7 +274,7 @@ ${ADMIN_REFERENCE_DOCS}
           temperature: 0.0,
           messages: [
             { role: 'system', content: initialSystemPrompt },
-            { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
+            { role: 'user', content: userPromptText },
           ],
         }),
       }).then(async (res) => {
@@ -266,7 +301,7 @@ ${ADMIN_REFERENCE_DOCS}
           temperature: 0.0,
           messages: [
             { role: 'system', content: initialSystemPrompt },
-            { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
+            { role: 'user', content: userPromptText },
           ],
         }),
       }).then(async (res) => {
@@ -306,7 +341,7 @@ ${ADMIN_REFERENCE_DOCS}
                 temperature: 0.0,
                 messages: [
                   { role: 'system', content: initialSystemPrompt },
-                  { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
+                  { role: 'user', content: userPromptText },
                 ],
               }),
             });
@@ -339,7 +374,7 @@ ${ADMIN_REFERENCE_DOCS}
                   temperature: 0.0,
                   messages: [
                     { role: 'system', content: initialSystemPrompt },
-                    { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
+                    { role: 'user', content: userPromptText },
                   ],
                 }),
               });
@@ -375,7 +410,7 @@ ${ADMIN_REFERENCE_DOCS}
                 temperature: 0.0,
                 messages: [
                   { role: 'system', content: initialSystemPrompt },
-                  { role: 'user', content: `請幫我分析以下八字命盤數據：\n\n${formattedText}` },
+                  { role: 'user', content: userPromptText },
                 ],
               }),
             });
@@ -409,32 +444,35 @@ ${ADMIN_REFERENCE_DOCS}
     const draftGrok = grokData?.choices?.[0]?.message?.content || '';
 
     // ==================================================================
-    // 第二階段：Google Gemini 3.8 Flash 大師終極校訂與總審閱
+    // 第二階段：Google Gemini 大師終極校訂與總審閱
     // ==================================================================
     let finalReport = '';
     let geminiUsed = false;
 
     if (geminiKey) {
       const geminiPrompt = `
-你是一位權威八字命理總審閱官，精通子平八字、《滴天髓徵義》、《造化元鑰》、《子平一得》、神峰通考和命理師指定的內部參考法則。
+你是一位權威八字命理總審閱官，精通子平八字、《滴天髓徵義》、《造化元鑰》、《子平一得》、神峰通考與指定命理規範。
 以下是由三位命理 AI（DeepSeek、Qwen 通義千問與 xAI Grok）對同一八字進行的初批草稿。
 
 【審閱與嚴格修正要求】：
-1. 嚴格對照【原八字排盤數據】與【內部參考規範】，對比 DeepSeek、Qwen 與 Grok 對於「用神、格局、病藥、喜忌」的判定。若有分歧，必須依據《造化元鑰》十干月令喜忌與《子平一得》為唯一標準進行裁決，確定唯一的格局與用神，嚴禁出現前後矛盾，用神不等於調候用神。
-2. 檢查初批報告有無「十神生剋錯誤」、「天干合化誤判」或「前後喜用神不一致」等邏輯矛盾，在批斷大運和流年吉凶等事情，是否有所遺漏錯誤，如有，應作出補註或修改。
-3. 確保第四部分感情婚姻分析 100% 符合命主的實際性別（男命論妻、女命論夫），完全刪除任何「假設命主為男/女」等不確定字眼。
-4. 檢查「格局」與「用神」是否唯一，嚴禁同時出現兩種矛盾格局判定。
-5. 出身、事業、感情和健康須要更專業、更詳盡解釋每個可能性給命主知道，如初級報告沒有提及或有遺漏，需要修改和補註。
-6. 請完全保留「六大章節 (### 一、至 ### 六、)」Markdown 格式輸出。
-7. 排盤後，原局八字的天干和地支本氣有殺星，必須嚴格遵從有殺先論殺的所有規定，有殺先論殺凌駕所有法則，傷官當令除外。
-8. 批斷時必定要遵從所有內部參考規則。
-9. 地支除本氣和月令藏元外，其他一律不可以做用神。
-10. 原局內有殺星，必須遵從有殺先論殺的所有規定，只比較日元和殺的強弱，原論身強弱，殺弱就是以財滋殺，殺為用神，殺強就制殺或以印化殺，不能殺弱但以印化殺或制殺，用神和藥神要分清楚
-10. 收列初批草稿後，必須先嚴格審查所有批斷是否嚴格遵從所有列出的規則，如沒有就需要修改及補註。
-11. 必須清楚判斷用神，忌神，和藥神，不容任何錯誤，用神是原局中有用之神，忌神是尅用神之神，藥神是醫病之神。
-12. 食神制殺格和傷官架殺格不能見印星，食神制殺若逢梟，非貧即夭，殺印相生格不能見財星，因為儲財破印。
-13. 有殺先論殺第一步必須先比較日元和殺的強弱，比較方法可直接對比八字裡的數量，是殺多還是日元比劫多，是否當令，有沒有長生和庫等因素，殺星有沒有根，有沒有透出，有沒有被制化，有沒有被合化，有沒有被沖合等。
-14. 只顯示命主的最終批命報告，不要顯示初批修正，總審閱的資料和裁決說明。
+1. 對比 DeepSeek、Qwen 與 Grok 的初批草稿，消除內部矛盾，確保用神與喜忌一貫，100% 遵照古典子平與內部法則。
+2. 確保內容完全符合命主實際性別（男命論妻、女命論夫），完全刪除任何「假設命主為男/女」等字眼。
+3. 嚴格維持與當前功能類型（${type === 'yearly' ? '【流年整體運勢】' : type === 'yearly_qa' ? '【流年問事解答】' : '【原局深度解盤】'}）相匹配的 Markdown 章節結構輸出。
+4. 只顯示命主的最終精緻批命報告，絕對不要顯示初批修正過程、審閱說明或對比過程。
+5. 嚴格對照【原八字排盤數據】與【內部參考規範】，對比 DeepSeek、Qwen 與 Grok 對於「用神、格局、病藥、喜忌」的判定。若有分歧，必須依據《造化元鑰》十干月令喜忌與《子平一得》為唯一標準進行裁決，確定唯一的格局與用神，嚴禁出現前後矛盾，用神不等於調候用神。
+6. 檢查初批報告有無「十神生剋錯誤」、「天干合化誤判」或「前後喜用神不一致」等邏輯矛盾，在批斷大運和流年吉凶等事情，是否有所遺漏錯誤，如有，應作出補註或修改。
+7. 檢查「格局」與「用神」是否唯一，嚴禁同時出現兩種矛盾格局判定。
+8. 出身、事業、感情和健康須要更專業、更詳盡解釋每個可能性給命主知道，如初級報告沒有提及或有遺漏，需要修改和補註。
+9. 請完全保留「六大章節 (### 一、至 ### 六、)」Markdown 格式輸出。
+10. 排盤後，原局八字的天干和地支本氣有殺星，必須嚴格遵從有殺先論殺的所有規定，有殺先論殺凌駕所有法則，傷官當令除外。
+11. 批斷時必定要遵從所有內部參考規則。
+12. 地支除本氣和月令藏元外，其他一律不可以做用神。
+13. 原局內有殺星，必須遵從有殺先論殺的所有規定，只比較日元和殺的強弱，原論身強弱，殺弱就是以財滋殺，殺為用神，殺強就制殺或以印化殺，不能殺弱但以印化殺或制殺，用神和藥神要分清楚
+14. 收列初批草稿後，必須先嚴格審查所有批斷是否嚴格遵從所有列出的規則，如沒有就需要修改及補註。
+15. 必須清楚判斷用神，忌神，和藥神，不容任何錯誤，用神是原局中有用之神，忌神是尅用神之神，藥神是醫病之神。
+16. 食神制殺格和傷官架殺格不能見印星，食神制殺若逢梟，非貧即夭，殺印相生格不能見財星，因為儲財破印。
+17. 有殺先論殺第一步必須先比較日元和殺的強弱，比較方法可直接對比八字裡的數量，是殺多還是日元比劫多，是否當令，有沒有長生和庫等因素，殺星有沒有根，有沒有透出，有沒有被制化，有沒有被合化，有沒有被沖合等。
+
 
 --------------------------------------------------
 【原八字排盤數據與內部規範】：
@@ -451,8 +489,7 @@ ${draftGrok || '（xAI Grok 未回應）'}
 --------------------------------------------------
 `.trim();
 
-      // 指定使用 gemini-3.8-flash 模型端點
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`;
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
 
       try {
         const geminiResponse = await fetch(geminiUrl, {
@@ -477,14 +514,14 @@ ${draftGrok || '（xAI Grok 未回應）'}
           if (text && text.trim() !== '') {
             finalReport = text;
             geminiUsed = true;
-            console.log('✅ Gemini 3.8 Flash 大師終極校訂成功！');
+            console.log('✅ Gemini 大師終極校訂成功！');
           }
         } else {
           const err = await geminiResponse.text();
-          executionErrors['Gemini(gemini-3.8-flash)'] = `HTTP ${geminiResponse.status}: ${err}`;
+          executionErrors['Gemini'] = `HTTP ${geminiResponse.status}: ${err}`;
         }
       } catch (err: any) {
-        executionErrors['Gemini(gemini-3.8-flash)'] = `網路異常: ${err.message}`;
+        executionErrors['Gemini'] = `網路異常: ${err.message}`;
       }
     } else {
       executionErrors['Gemini'] = '未設定 GEMINI_API_KEY';
@@ -497,6 +534,8 @@ ${draftGrok || '（xAI Grok 未回應）'}
     return NextResponse.json({
       result: finalReport,
       meta: {
+        type,
+        targetYear,
         deepseekUsed: !!draftDeepseek,
         qwenUsed: !!draftQwen,
         grokUsed: !!draftGrok,
