@@ -347,7 +347,6 @@ function BaziForm({
     calendar: 'solar' | 'lunar';
     trueSolar: string;
     longitude: string;
-    userNotes: string;
   }) => void;
   loading: boolean;
 }) {
@@ -361,7 +360,6 @@ function BaziForm({
   const [day, setDay] = useState('15');
   const [hour, setHour] = useState('14');
   const [minute, setMinute] = useState('0');
-  const [userNotes, setUserNotes] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -376,7 +374,6 @@ function BaziForm({
       calendar,
       trueSolar,
       longitude,
-      userNotes: userNotes.trim(),
     });
   };
 
@@ -522,17 +519,6 @@ function BaziForm({
             />
           )}
         </div>
-
-        <label className="flex flex-col gap-1.5 w-full">
-          <span className="text-xs font-medium text-slate-400">個人背景 / 特質提問（選填）</span>
-          <textarea
-            value={userNotes}
-            onChange={(e) => setUserNotes(e.target.value)}
-            rows={3}
-            placeholder="可補充個人經歷或特定想詢問的問題..."
-            className="w-full resize-y rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-amber-500/80 focus:ring-1 focus:ring-amber-500/40"
-          />
-        </label>
 
         <button
           type="submit"
@@ -1139,7 +1125,6 @@ export default function Page() {
     gender: 'male' | 'female';
     trueSolar: string;
     longitude: string;
-    userNotes: string;
   }) => {
     setLoading(true);
     setTimeout(() => {
@@ -1154,7 +1139,7 @@ export default function Page() {
         Number(formData.longitude)
       );
       setBaziData(result);
-      setUserNotes(formData.userNotes);
+      setUserNotes('');
       setLoading(false);
     }, 300);
   };
