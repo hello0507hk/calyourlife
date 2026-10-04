@@ -20,6 +20,10 @@ import {
   Clock,
   ArrowRight,
   Home,
+  HelpCircle,
+  MessageSquare,
+  Send,
+  CalendarDays,
 } from 'lucide-react';
 
 // 命盤型別定義
@@ -102,6 +106,16 @@ interface LuckPeriod {
   branch: string;
   element: Element;
   current?: boolean;
+}
+
+// 輔助函式：根據公曆年份計算干支
+function getYearGanZhi(year: number): string {
+  const stems = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
+  const branches = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
+  const offset = year - 4;
+  const stem = stems[(offset % 10 + 10) % 10];
+  const branch = branches[(offset % 12 + 12) % 12];
+  return `${year} ${stem}${branch}年`;
 }
 
 function mapBaziToPillars(bazi: BaziResult): Pillar[] {
@@ -514,7 +528,7 @@ function BaziForm({
           <textarea
             value={userNotes}
             onChange={(e) => setUserNotes(e.target.value)}
-            rows={4}
+            rows={3}
             placeholder="可補充個人經歷或特定想詢問的問題..."
             className="w-full resize-y rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-amber-500/80 focus:ring-1 focus:ring-amber-500/40"
           />
@@ -546,7 +560,7 @@ function GlyphBlock({ char, element, caption }: { char: string; element: Element
 }
 
 /* ------------------------------------------------------------------ */
-/* 四柱八字 ＋ 藏干十神 (嚴格行列精確對齊：年柱 ➔ 月柱 ➔ 日柱 ➔ 時柱)     */
+/* 四柱八字 ＋ 藏干十神                                                */
 /* ------------------------------------------------------------------ */
 
 function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarText?: string }) {
@@ -564,12 +578,9 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
         <span className="text-xs text-slate-400">（右起：年柱 ➔ 月柱 ➔ 日柱 ➔ 時柱）</span>
       </div>
 
-      {/* 使用 sm:flex-row-reverse 佈局，並加上項防拉伸控制 */}
       <div className="flex flex-col gap-2.5 sm:flex-row-reverse sm:gap-3 items-stretch">
         {pillars.map((p) => {
           const isDay = p.key === 'day';
-          
-          // 統一固定 3 個槽位，防高度落差
           const slots = [...p.hiddenStems];
           while (slots.length < 3) {
             slots.push({ char: '', element: 'earth', god: '' });
@@ -582,7 +593,6 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
                 isDay ? 'border-amber-500/80 ring-1 ring-amber-500/30' : 'border-slate-800'
               }`}
             >
-              {/* 第 1 行：柱名與宮位標題 */}
               <header className="mb-2.5 flex h-7 items-center justify-between border-b border-slate-800/80 pb-2 shrink-0">
                 <div className="flex items-center gap-1.5">
                   <h3 className="font-serif text-base font-bold text-slate-100">{p.label}</h3>
@@ -595,9 +605,7 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
                 <span className="text-[10px] text-slate-400">{p.sublabel}</span>
               </header>
 
-              {/* 天干與地支 (嚴格防拉伸) */}
               <div className="flex flex-col gap-2 shrink-0">
-                {/* 第 2 行：天干 */}
                 <div className="relative shrink-0">
                   <GlyphBlock char={p.heavenlyStem} element={p.heavenlyElement} caption="天干 · " />
                   <span className="absolute top-1.5 right-1.5 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400 border border-amber-500/30 shadow-sm">
@@ -605,7 +613,6 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
                   </span>
                 </div>
 
-                {/* 第 3 行：地支 */}
                 <div className="relative shrink-0">
                   <GlyphBlock char={p.earthlyBranch} element={p.earthlyElement} caption="地支 · " />
                   <span className="absolute top-1.5 right-1.5 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300 border border-slate-700/50 shadow-sm">
@@ -614,7 +621,6 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
                 </div>
               </div>
 
-              {/* 第 4 行：藏干與十神列表 */}
               <div className="mt-3 border-t border-slate-800/80 pt-2 shrink-0">
                 <div className="mb-1.5 text-[10px] font-medium text-slate-400 text-center">
                   藏干 · 十神
@@ -677,7 +683,6 @@ function PillarDetails({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* 五行分佈 */}
       <SectionCard title="五行分佈" icon={<PieChart className="size-4" />}>
         <div className="flex flex-col gap-2.5">
           {distribution.map((d) => {
@@ -698,7 +703,6 @@ function PillarDetails({
         </div>
       </SectionCard>
 
-      {/* 大運走勢 */}
       <SectionCard title="大運走勢" icon={<TrendingUp className="size-4" />}>
         <div className="-mx-1 overflow-x-auto pb-1">
           <ol className="flex min-w-max items-stretch gap-2 px-1">
@@ -725,33 +729,111 @@ function PillarDetails({
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* 三大 AI 分析功能：1. 深度解盤  2. 流年解盤  3. 流年問事              */
+/* ------------------------------------------------------------------ */
+
 function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; userNotes: string }) {
-  const [report, setReport] = useState<string>('');
-  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'deep' | 'yearly' | 'yearly_qa'>('deep');
 
-  const handleGenerate = async () => {
+  // 1. 深度解盤狀態
+  const [deepReport, setDeepReport] = useState<string>('');
+  const [deepLoading, setDeepLoading] = useState(false);
+
+  // 2. 流年解盤狀態
+  const [targetYear, setTargetYear] = useState<number>(2026);
+  const [yearlyReport, setYearlyReport] = useState<string>('');
+  const [yearlyLoading, setYearlyLoading] = useState(false);
+
+  // 3. 流年問事狀態
+  const [qaYear, setQaYear] = useState<number>(2026);
+  const [qaQuestion, setQaQuestion] = useState<string>('');
+  const [qaReport, setQaReport] = useState<string>('');
+  const [qaLoading, setQaLoading] = useState(false);
+
+  // 快捷提問選項
+  const QUICK_QUESTIONS = [
+    '今年事業有轉職跳槽或升遷機會嗎？',
+    '今年財運吉凶？適合投資理財嗎？',
+    '今年感情婚姻運勢如何？有桃花或感情變化嗎？',
+    '今年健康與身體狀況需要注意什麼？',
+    '今年有小人是非或口舌官非風險嗎？',
+  ];
+
+  // 通用請求 API 函式
+  const callAnalyzeApi = async (payload: any) => {
+    const res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    return data.result;
+  };
+
+  // 1. 生成深度解盤
+  const handleGenerateDeep = async () => {
     if (!baziData) return;
-    setLoading(true);
-    setReport('');
-
+    setDeepLoading(true);
+    setDeepReport('');
     try {
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ baziData, userNotes }),
+      const result = await callAnalyzeApi({
+        type: 'deep',
+        baziData,
+        userNotes,
       });
-
-      const data = await res.json();
-      if (data.result) {
-        setReport(data.result);
-      } else {
-        setReport('AI 分析生成失敗，請確定後端 API 已正確建立。');
-      }
+      setDeepReport(result || '深度解盤生成失敗，請再試一次。');
     } catch (err) {
       console.error(err);
-      setReport('發送請求失敗，請檢查網路連線或 API key。');
+      setDeepReport('發送請求失敗，請檢查網路連線或 API key。');
     } finally {
-      setLoading(false);
+      setDeepLoading(false);
+    }
+  };
+
+  // 2. 生成流年解盤
+  const handleGenerateYearly = async () => {
+    if (!baziData) return;
+    setYearlyLoading(true);
+    setYearlyReport('');
+    try {
+      const result = await callAnalyzeApi({
+        type: 'yearly',
+        baziData,
+        targetYear,
+        userNotes,
+      });
+      setYearlyReport(result || '流年解盤生成失敗，請再試一次。');
+    } catch (err) {
+      console.error(err);
+      setYearlyReport('發送請求失敗，請檢查網路連線或 API key。');
+    } finally {
+      setYearlyLoading(false);
+    }
+  };
+
+  // 3. 生成流年問事
+  const handleGenerateQa = async (questionText?: string) => {
+    if (!baziData) return;
+    const finalQuestion = questionText || qaQuestion;
+    if (!finalQuestion.trim()) return;
+
+    setQaLoading(true);
+    setQaReport('');
+    try {
+      const result = await callAnalyzeApi({
+        type: 'yearly_qa',
+        baziData,
+        targetYear: qaYear,
+        question: finalQuestion,
+        userNotes,
+      });
+      setQaReport(result || '流年問事解答生成失敗，請再試一次。');
+    } catch (err) {
+      console.error(err);
+      setQaReport('發送請求失敗，請檢查網路連線或 API key。');
+    } finally {
+      setQaLoading(false);
     }
   };
 
@@ -759,19 +841,25 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
     window.print();
   };
 
+  // 可選年份選單 (2024 至 2035)
+  const YEAR_OPTIONS = Array.from({ length: 12 }, (_, i) => 2024 + i);
+
   return (
     <section className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-slate-900/90 p-5 shadow-xl sm:p-6">
-      <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      {/* 頂部標題 */}
+      <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-slate-800">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-1.5 text-amber-400">
             <Sparkles className="size-4" />
-            <span className="text-xs font-medium tracking-widest uppercase">AI 命理分析</span>
+            <span className="text-xs font-medium tracking-widest uppercase">AI 命理推演中心</span>
           </div>
-          <h2 className="font-serif text-lg font-medium text-slate-100">AI 命盤總結報告</h2>
-          <p className="text-xs text-slate-400 print:hidden">結合四柱、藏干、十神與大運走勢，由為你生成個人化詳細命書。</p>
+          <h2 className="font-serif text-xl font-bold text-slate-100">三大 AI 命理會診功能</h2>
         </div>
 
-        {report && (
+        {/* 列印／PDF 按鈕 */}
+        {((activeTab === 'deep' && deepReport) ||
+          (activeTab === 'yearly' && yearlyReport) ||
+          (activeTab === 'yearly_qa' && qaReport)) && (
           <div className="flex items-center gap-2 print:hidden shrink-0">
             <button
               type="button"
@@ -793,36 +881,241 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
         )}
       </div>
 
-      <div className="relative mt-4">
-        {report ? (
-          <div className="flex flex-col gap-3">
-            <Quote className="size-4 text-amber-500/60 print:hidden" />
-            <div className="prose prose-invert max-w-none text-sm leading-relaxed text-slate-200 whitespace-pre-line print:text-black print:prose-neutral">
-              {report}
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-800 bg-slate-950/60 px-4 py-8 text-center print:hidden">
-            <span className="inline-flex size-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-400">
-              <WandSparkles className="size-4" />
-            </span>
-            <div className="flex flex-col gap-0.5">
-              <p className="text-sm font-medium text-slate-200">尚未生成分析報告</p>
-              <p className="max-w-xs text-xs text-slate-400">點擊下方按鈕，AI 將為此命盤撰寫格局與運勢解讀。</p>
-            </div>
-          </div>
-        )}
+      {/* 功能分頁按鈕 (Tabs) */}
+      <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-xl bg-slate-950 p-1.5 border border-slate-800/80 print:hidden">
+        <button
+          type="button"
+          onClick={() => setActiveTab('deep')}
+          className={`flex items-center justify-center gap-2 rounded-lg py-2.5 px-2 text-xs font-bold transition-all ${
+            activeTab === 'deep'
+              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+          }`}
+        >
+          <WandSparkles className="size-4" />
+          <span>1. 深度解盤</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('yearly')}
+          className={`flex items-center justify-center gap-2 rounded-lg py-2.5 px-2 text-xs font-bold transition-all ${
+            activeTab === 'yearly'
+              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+          }`}
+        >
+          <CalendarDays className="size-4" />
+          <span>2. 流年解盤</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('yearly_qa')}
+          className={`flex items-center justify-center gap-2 rounded-lg py-2.5 px-2 text-xs font-bold transition-all ${
+            activeTab === 'yearly_qa'
+              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+          }`}
+        >
+          <HelpCircle className="size-4" />
+          <span>3. 流年問事</span>
+        </button>
       </div>
 
-      <button
-        type="button"
-        onClick={handleGenerate}
-        disabled={loading}
-        className="relative mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm font-medium text-amber-300 transition-all hover:bg-amber-500/20 disabled:opacity-70 print:hidden"
-      >
-        <WandSparkles className="size-4 text-amber-400" />
-        {loading ? 'AI 大師推演中…' : report ? '重新生成 AI 深度解盤' : '生成 AI 深度解盤'}
-      </button>
+      {/* ==================== 功能 1：深度解盤 ==================== */}
+      {activeTab === 'deep' && (
+        <div className="mt-5 flex flex-col gap-4">
+          <p className="text-xs text-slate-400 leading-relaxed">
+            結合四柱八字格局、日主旺衰、喜用神定位，精準推算一生事業、財運、婚姻與健康總論。
+          </p>
+
+          <button
+            type="button"
+            onClick={handleGenerateDeep}
+            disabled={deepLoading}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-slate-950 transition-all hover:bg-amber-400 disabled:opacity-70 print:hidden shadow-lg shadow-amber-500/10"
+          >
+            <WandSparkles className="size-4 text-slate-950" />
+            {deepLoading ? 'AI 四大典籍會診推演中…' : deepReport ? '重新生成 AI 深度解盤' : '生成 AI 原局深度解盤'}
+          </button>
+
+          {/* 報告展示 */}
+          {deepReport ? (
+            <div className="mt-2 flex flex-col gap-3 rounded-xl bg-slate-950/60 border border-slate-800 p-4 sm:p-5">
+              <Quote className="size-4 text-amber-500/60 print:hidden" />
+              <div className="prose prose-invert max-w-none text-sm leading-relaxed text-slate-200 whitespace-pre-line print:text-black">
+                {deepReport}
+              </div>
+            </div>
+          ) : (
+            !deepLoading && (
+              <div className="flex flex-col items-center gap-2.5 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 px-4 py-8 text-center print:hidden">
+                <span className="inline-flex size-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-400">
+                  <WandSparkles className="size-5" />
+                </span>
+                <p className="text-xs text-slate-400">點擊上方按鈕，AI 將為你推算八字原局與格局總論。</p>
+              </div>
+            )
+          )}
+        </div>
+      )}
+
+      {/* ==================== 功能 2：流年解盤 ==================== */}
+      {activeTab === 'yearly' && (
+        <div className="mt-5 flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-slate-950 p-3.5 border border-slate-800">
+            <div className="flex items-center gap-2">
+              <CalendarIcon className="size-4 text-amber-400 shrink-0" />
+              <span className="text-xs font-bold text-slate-200">選擇推算流年份：</span>
+            </div>
+
+            <div className="relative flex-1 sm:max-w-xs">
+              <select
+                value={targetYear}
+                onChange={(e) => setTargetYear(Number(e.target.value))}
+                className="w-full appearance-none rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 pr-8 text-xs font-bold text-amber-300 outline-none focus:border-amber-500"
+              >
+                {YEAR_OPTIONS.map((y) => (
+                  <option key={y} value={y} className="bg-slate-900 text-slate-200">
+                    {getYearGanZhi(y)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleGenerateYearly}
+            disabled={yearlyLoading}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-slate-950 transition-all hover:bg-amber-400 disabled:opacity-70 print:hidden shadow-lg shadow-amber-500/10"
+          >
+            <CalendarDays className="size-4 text-slate-950" />
+            {yearlyLoading
+              ? `推算【${getYearGanZhi(targetYear)}】運勢中…`
+              : yearlyReport
+              ? `重新推算【${getYearGanZhi(targetYear)}】流年運勢`
+              : `推算【${getYearGanZhi(targetYear)}】流年運勢`}
+          </button>
+
+          {/* 報告展示 */}
+          {yearlyReport ? (
+            <div className="mt-2 flex flex-col gap-3 rounded-xl bg-slate-950/60 border border-slate-800 p-4 sm:p-5">
+              <Quote className="size-4 text-amber-500/60 print:hidden" />
+              <div className="prose prose-invert max-w-none text-sm leading-relaxed text-slate-200 whitespace-pre-line print:text-black">
+                {yearlyReport}
+              </div>
+            </div>
+          ) : (
+            !yearlyLoading && (
+              <div className="flex flex-col items-center gap-2.5 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 px-4 py-8 text-center print:hidden">
+                <span className="inline-flex size-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-400">
+                  <CalendarDays className="size-5" />
+                </span>
+                <p className="text-xs text-slate-400">選擇年份並點擊按鈕，推算該流年之吉凶細節與月份提示。</p>
+              </div>
+            )
+          )}
+        </div>
+      )}
+
+      {/* ==================== 功能 3：流年問事 ==================== */}
+      {activeTab === 'yearly_qa' && (
+        <div className="mt-5 flex flex-col gap-4">
+          {/* 流年年份選擇 */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-slate-950 p-3.5 border border-slate-800">
+            <div className="flex items-center gap-2">
+              <HelpCircle className="size-4 text-amber-400 shrink-0" />
+              <span className="text-xs font-bold text-slate-200">選擇問事流年份：</span>
+            </div>
+
+            <div className="relative flex-1 sm:max-w-xs">
+              <select
+                value={qaYear}
+                onChange={(e) => setQaYear(Number(e.target.value))}
+                className="w-full appearance-none rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 pr-8 text-xs font-bold text-amber-300 outline-none focus:border-amber-500"
+              >
+                {YEAR_OPTIONS.map((y) => (
+                  <option key={y} value={y} className="bg-slate-900 text-slate-200">
+                    {getYearGanZhi(y)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            </div>
+          </div>
+
+          {/* 快捷提問選項 */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-slate-400">快捷熱門提問：</span>
+            <div className="flex flex-wrap gap-1.5">
+              {QUICK_QUESTIONS.map((q, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    setQaQuestion(q);
+                    handleGenerateQa(q);
+                  }}
+                  className="rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-300 transition-colors hover:border-amber-500/50 hover:bg-amber-500/10 hover:text-amber-300"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 自訂問題輸入框 */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-slate-400">自訂問題提問：</span>
+            <div className="relative w-full">
+              <textarea
+                value={qaQuestion}
+                onChange={(e) => setQaQuestion(e.target.value)}
+                rows={3}
+                placeholder="例如：今年適合創業換工作嗎？感情上會遇到正緣嗎？"
+                className="w-full resize-y rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-amber-500/80 focus:ring-1 focus:ring-amber-500/40"
+              />
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => handleGenerateQa()}
+            disabled={qaLoading || !qaQuestion.trim()}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-slate-950 transition-all hover:bg-amber-400 disabled:opacity-60 print:hidden shadow-lg shadow-amber-500/10"
+          >
+            <Send className="size-4 text-slate-950" />
+            {qaLoading ? `AI 推算【${getYearGanZhi(qaYear)}】解答中…` : `提問【${getYearGanZhi(qaYear)}】特定流年吉凶`}
+          </button>
+
+          {/* 報告展示 */}
+          {qaReport ? (
+            <div className="mt-2 flex flex-col gap-3 rounded-xl bg-slate-950/60 border border-slate-800 p-4 sm:p-5">
+              <div className="flex items-center gap-2 border-b border-slate-800/80 pb-2.5">
+                <MessageSquare className="size-4 text-amber-400" />
+                <span className="text-xs font-bold text-amber-300">
+                  【{getYearGanZhi(qaYear)}】問題解答：{qaQuestion}
+                </span>
+              </div>
+              <div className="prose prose-invert max-w-none text-sm leading-relaxed text-slate-200 whitespace-pre-line print:text-black">
+                {qaReport}
+              </div>
+            </div>
+          ) : (
+            !qaLoading && (
+              <div className="flex flex-col items-center gap-2.5 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 px-4 py-8 text-center print:hidden">
+                <span className="inline-flex size-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-400">
+                  <HelpCircle className="size-5" />
+                </span>
+                <p className="text-xs text-slate-400">點擊快捷提問或輸入你想了解的特定問題，AI 將針對該流年解答。</p>
+              </div>
+            )
+          )}
+        </div>
+      )}
     </section>
   );
 }
