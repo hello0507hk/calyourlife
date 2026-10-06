@@ -489,7 +489,7 @@ ${draftGrok || '（xAI Grok 未回應）'}
 --------------------------------------------------
 `.trim();
 
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`;
 
       try {
         const geminiResponse = await fetch(geminiUrl, {
