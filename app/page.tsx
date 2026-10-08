@@ -536,9 +536,9 @@ function BaziForm({
 function GlyphBlock({ char, element, caption }: { char: string; element: Element; caption: string }) {
   const s = ELEMENT_STYLE[element];
   return (
-    <div className={`flex flex-col items-center justify-center gap-0.5 rounded-xl border ${s.border} ${s.bg} px-2 py-2.5 shrink-0`}>
-      <span className={`font-serif text-2xl font-bold leading-none sm:text-3xl ${s.text}`}>{char}</span>
-      <span className={`text-[10px] font-medium ${s.text}`}>
+    <div className={`flex flex-col items-center justify-center gap-0.5 rounded-xl border ${s.border} ${s.bg} px-1 py-1.5 sm:px-2 sm:py-2.5 shrink-0`}>
+      <span className={`font-serif text-xl sm:text-3xl font-bold leading-none ${s.text}`}>{char}</span>
+      <span className={`text-[9px] sm:text-[10px] font-medium ${s.text}`}>
         {caption}{ELEMENT_LABEL[element]}
       </span>
     </div>
@@ -546,100 +546,103 @@ function GlyphBlock({ char, element, caption }: { char: string; element: Element
 }
 
 /* ------------------------------------------------------------------ */
-/* 四柱八字 ＋ 藏干十神                                                */
+/* 四柱八字 ＋ 藏干十神（手機版適應性優化）                            */
 /* ------------------------------------------------------------------ */
 
 function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarText?: string }) {
   return (
-    <section className="flex flex-col gap-3">
+    <section className="flex flex-col gap-3 w-full overflow-hidden">
       {trueSolarText && (
-        <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-xs font-medium text-amber-300">
+        <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300">
           <Clock className="size-4 shrink-0 text-amber-400" />
           <span>{trueSolarText}</span>
         </div>
       )}
 
       <div className="flex items-baseline justify-between">
-        <h2 className="font-serif text-xl font-medium text-slate-100">四柱八字 · 藏干十神</h2>
-        <span className="text-xs text-slate-400">（右起：年柱 ➔ 月柱 ➔ 日柱 ➔ 時柱）</span>
+        <h2 className="font-serif text-lg sm:text-xl font-medium text-slate-100">四柱八字 · 藏干十神</h2>
+        <span className="text-[11px] sm:text-xs text-slate-400">（右起：年柱 ➔ 月柱 ➔ 日柱 ➔ 時柱）</span>
       </div>
 
-      <div className="flex flex-col gap-2.5 sm:flex-row-reverse sm:gap-3 items-stretch">
-        {pillars.map((p) => {
-          const isDay = p.key === 'day';
-          const slots = [...p.hiddenStems];
-          while (slots.length < 3) {
-            slots.push({ char: '', element: 'earth', god: '' });
-          }
+      {/* 手機版支援橫向滾動，確保在超窄手機螢幕上不擠壓錯位 */}
+      <div className="w-full overflow-x-auto pb-2 -mx-1 px-1">
+        <div className="flex min-w-[560px] sm:min-w-0 flex-row-reverse gap-2 sm:gap-3 items-stretch">
+          {pillars.map((p) => {
+            const isDay = p.key === 'day';
+            const slots = [...p.hiddenStems];
+            while (slots.length < 3) {
+              slots.push({ char: '', element: 'earth', god: '' });
+            }
 
-          return (
-            <article
-              key={p.key}
-              className={`flex flex-1 flex-col items-stretch rounded-2xl border bg-slate-900/90 p-3.5 shadow-xl transition-all ${
-                isDay ? 'border-amber-500/80 ring-1 ring-amber-500/30' : 'border-slate-800'
-              }`}
-            >
-              <header className="mb-2.5 flex h-7 items-center justify-between border-b border-slate-800/80 pb-2 shrink-0">
-                <div className="flex items-center gap-1.5">
-                  <h3 className="font-serif text-base font-bold text-slate-100">{p.label}</h3>
-                  {isDay && (
-                    <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300">
-                      日主
+            return (
+              <article
+                key={p.key}
+                className={`flex flex-1 flex-col items-stretch rounded-2xl border bg-slate-900/90 p-2 sm:p-3.5 shadow-xl transition-all ${
+                  isDay ? 'border-amber-500/80 ring-1 ring-amber-500/30' : 'border-slate-800'
+                }`}
+              >
+                <header className="mb-2 flex h-6 sm:h-7 items-center justify-between border-b border-slate-800/80 pb-1.5 shrink-0">
+                  <div className="flex items-center gap-1">
+                    <h3 className="font-serif text-sm sm:text-base font-bold text-slate-100">{p.label}</h3>
+                    {isDay && (
+                      <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-1 py-0.5 text-[8px] sm:text-[9px] font-semibold text-amber-300">
+                        日主
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[9px] sm:text-[10px] text-slate-400">{p.sublabel}</span>
+                </header>
+
+                <div className="flex flex-col gap-1.5 sm:gap-2 shrink-0">
+                  <div className="relative shrink-0">
+                    <GlyphBlock char={p.heavenlyStem} element={p.heavenlyElement} caption="天干 · " />
+                    <span className="absolute top-1 right-1 sm:top-1.5 sm:right-1.5 rounded bg-slate-950/80 px-1 py-0.5 text-[9px] sm:text-[10px] font-semibold text-amber-400 border border-amber-500/30 shadow-sm">
+                      {p.heavenlyTenGod}
                     </span>
-                  )}
-                </div>
-                <span className="text-[10px] text-slate-400">{p.sublabel}</span>
-              </header>
+                  </div>
 
-              <div className="flex flex-col gap-2 shrink-0">
-                <div className="relative shrink-0">
-                  <GlyphBlock char={p.heavenlyStem} element={p.heavenlyElement} caption="天干 · " />
-                  <span className="absolute top-1.5 right-1.5 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400 border border-amber-500/30 shadow-sm">
-                    {p.heavenlyTenGod}
-                  </span>
+                  <div className="relative shrink-0">
+                    <GlyphBlock char={p.earthlyBranch} element={p.earthlyElement} caption="地支 · " />
+                    <span className="absolute top-1 right-1 sm:top-1.5 sm:right-1.5 rounded bg-slate-950/80 px-1 py-0.5 text-[9px] sm:text-[10px] font-semibold text-slate-300 border border-slate-700/50 shadow-sm">
+                      {p.earthlyTenGod}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="relative shrink-0">
-                  <GlyphBlock char={p.earthlyBranch} element={p.earthlyElement} caption="地支 · " />
-                  <span className="absolute top-1.5 right-1.5 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300 border border-slate-700/50 shadow-sm">
-                    {p.earthlyTenGod}
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-3 border-t border-slate-800/80 pt-2 shrink-0">
-                <div className="mb-1.5 text-[10px] font-medium text-slate-400 text-center">
-                  藏干 · 十神
-                </div>
-                <div className="flex flex-col gap-1">
-                  {slots.map((h, i) => {
-                    if (!h.char) {
+                <div className="mt-2.5 sm:mt-3 border-t border-slate-800/80 pt-1.5 sm:pt-2 shrink-0">
+                  <div className="mb-1 text-[9px] sm:text-[10px] font-medium text-slate-400 text-center">
+                    藏干 · 十神
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    {slots.map((h, i) => {
+                      if (!h.char) {
+                        return (
+                          <div
+                            key={i}
+                            className="flex h-6 sm:h-7 shrink-0 items-center justify-between rounded-lg border border-transparent bg-transparent px-1.5 py-1"
+                          />
+                        );
+                      }
+                      const s = ELEMENT_STYLE[h.element];
                       return (
                         <div
                           key={i}
-                          className="flex h-7 shrink-0 items-center justify-between rounded-lg border border-transparent bg-transparent px-2 py-1"
-                        />
-                      );
-                    }
-                    const s = ELEMENT_STYLE[h.element];
-                    return (
-                      <div
-                        key={i}
-                        className={`flex h-7 shrink-0 items-center justify-between rounded-lg border ${s.border} ${s.bg} px-2 py-1 transition-colors`}
-                      >
-                        <div className="flex items-center gap-1">
-                          <span className={`font-serif text-xs font-bold ${s.text}`}>{h.char}</span>
-                          <span className={`text-[9px] opacity-75 ${s.text}`}>({ELEMENT_LABEL[h.element]})</span>
+                          className={`flex h-6 sm:h-7 shrink-0 items-center justify-between rounded-lg border ${s.border} ${s.bg} px-1.5 sm:px-2 py-1 transition-colors`}
+                        >
+                          <div className="flex items-center gap-0.5 sm:gap-1">
+                            <span className={`font-serif text-xs font-bold ${s.text}`}>{h.char}</span>
+                            <span className={`text-[8px] sm:text-[9px] opacity-75 ${s.text}`}>({ELEMENT_LABEL[h.element]})</span>
+                          </div>
+                          <span className="text-[9px] sm:text-[10px] font-medium text-slate-300">{h.god}</span>
                         </div>
-                        <span className="text-[10px] font-medium text-slate-300">{h.god}</span>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            </article>
-          );
-        })}
+              </article>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
