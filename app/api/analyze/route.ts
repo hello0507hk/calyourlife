@@ -7,6 +7,15 @@ export const dynamic = 'force-dynamic';
 // 2. 延長 Vercel 超時限制至 300 秒（Vercel Pro 帳號生效）
 export const maxDuration = 300;
 
+// 初始化全域統計變數 (供後台 /admin 讀取實時數據)
+if (!(global as any).__site_stats) {
+  (global as any).__site_stats = {
+    totalCalls: 0,
+    callsToday: 0,
+    logs: [],
+  };
+}
+
 // 自動計算干支年份
 function getYearGanZhi(year: number): string {
   const stems = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
@@ -121,6 +130,18 @@ export async function POST(req: Request) {
 
   try {
     const { type = 'deep', baziData, userNotes, targetYear = 2026, question } = await req.json();
+
+    // 紀錄實時呼叫至後台計數器
+    if ((global as any).__site_stats) {
+      (global as any).__site_stats.totalCalls += 1;
+      (global as any).__site_stats.callsToday += 1;
+      (global as any).__site_stats.logs.push({
+        time: new Date().toLocaleTimeString('zh-TW', { timeZone: 'Asia/Hong_Kong' }),
+        level: 'INFO',
+        model: 'Multi-AI',
+        message: `收到八字批命請求 (類型: ${type || 'deep'})`,
+      });
+    }
 
     const deepseekKey = process.env.DEEPSEEK_API_KEY?.trim();
     const dashscopeKey = process.env.QWEN_API_KEY?.trim();
@@ -490,7 +511,8 @@ ${draftGrok || '（xAI Grok 未回應）'}
 --------------------------------------------------
 `.trim();
 
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`;
+      // 修正：更正為 Google 官方標準的模型名稱 gemini-1.5-flash
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
 
       try {
         const geminiResponse = await fetch(geminiUrl, {
