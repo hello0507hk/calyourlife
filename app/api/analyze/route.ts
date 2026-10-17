@@ -312,7 +312,7 @@ ${ADMIN_REFERENCE_DOCS}
           Authorization: `Bearer ${openrouterKey}`,
         },
         body: JSON.stringify({
-          model: 'qwen/qwen-max',
+          model: 'qwen/qwen3.8-flash',
           temperature: 0.0,
           messages: [
             { role: 'system', content: initialSystemPrompt },
