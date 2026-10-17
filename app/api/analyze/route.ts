@@ -233,7 +233,7 @@ export async function POST(req: Request) {
 3. 捉用神必須先參照造化元鑰中十天干在不同月令的喜忌，滴天髓補註中的命例，子平一得的命例，必須在原局八字中找出有用之神，不可用地支藏元做用神，五行雖弱，但仍可作用神，如果八字天干地支入面找不到有用之神，除非該五行在原局中被傷盡，否則都應在原局中捉用神，日元必須當令的情況下，才可在月令藏元中捉用神，否則需要判斷是否無用神。
 4. 喜忌之定義是生旺用神是喜神，八字之中有用之神為用神，忌神為尅用神之神，病為原局八字問題之處，藥神為醫治病的藥。
 
-【參考文獻與指定批命規範】：
+【必須參考文獻與指定批命規範】：
 --------------------------------------------------
 ${ADMIN_REFERENCE_DOCS}
 --------------------------------------------------
@@ -281,7 +281,7 @@ ${ADMIN_REFERENCE_DOCS}
         Authorization: `Bearer ${deepseekKey}`,
       },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-pro',
         temperature: 0.0,
         top_p: 0.1,
         messages: [
@@ -312,7 +312,7 @@ ${ADMIN_REFERENCE_DOCS}
           Authorization: `Bearer ${openrouterKey}`,
         },
         body: JSON.stringify({
-          model: 'qwen/qwen-2.5-72b-instruct',
+          model: 'qwen/qwen-max',
           temperature: 0.0,
           messages: [
             { role: 'system', content: initialSystemPrompt },
@@ -364,7 +364,7 @@ ${ADMIN_REFERENCE_DOCS}
     // 1.3 Grok 初批 (順序優先調用最新模型)
     let grokPromise: Promise<any> = Promise.resolve(null);
     
-    const preferredXaiModels = ['grok-3', 'grok-2-latest', 'grok-2', 'grok-2-vision-1212'];
+    const preferredXaiModels = ['grok-4.5', 'grok-2-latest', 'grok-2', 'grok-2-vision-1212'];
     const preferredOpenRouterModels = ['x-ai/grok-3', 'x-ai/grok-2', 'x-ai/grok-2-vision'];
 
     if (xaiKey) {
