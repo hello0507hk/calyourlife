@@ -281,7 +281,7 @@ ${ADMIN_REFERENCE_DOCS}
         Authorization: `Bearer ${deepseekKey}`,
       },
       body: JSON.stringify({
-        model: 'deepseek-v4-pro',
+        model: 'deepseek-flash',
         temperature: 0.0,
         top_p: 0.1,
         messages: [
@@ -364,7 +364,7 @@ ${ADMIN_REFERENCE_DOCS}
     // 1.3 Grok 初批 (順序優先調用最新模型)
     let grokPromise: Promise<any> = Promise.resolve(null);
     
-    const preferredXaiModels = ['grok-4.5', 'grok-2-latest', 'grok-2', 'grok-2-vision-1212'];
+    const preferredXaiModels = ['grok-4.3', 'grok-2-latest', 'grok-2', 'grok-2-vision-1212'];
     const preferredOpenRouterModels = ['x-ai/grok-3', 'x-ai/grok-2', 'x-ai/grok-2-vision'];
 
     if (xaiKey) {
