@@ -4,7 +4,7 @@ import { ADMIN_REFERENCE_DOCS } from '@/lib/adminKnowledge';
 // 1. 強制動態獲取環境變數，禁止靜態快取
 export const dynamic = 'force-dynamic';
 
-// 2. 延長 Vercel 超時限制至 300 秒（Vercel Pro 帳號生效）
+// 2. 超時限制（Vercel Pro 帳號設為 300 秒，Hobby 免費版請設為 60）
 export const maxDuration = 300;
 
 // 初始化全域統計變數 (供後台 /admin 讀取實時數據)
@@ -55,9 +55,23 @@ function checkGanHe(gans: string[]) {
 
 // 構建傳給 AI 的八字 Prompt 文字
 function buildBaziText(baziData: any, userNotes?: string) {
-  const { eightChar, dayGan, dayGanWuxing, wuxingCounts, dayyun, solarDate, lunarDate, gender, genderText } = baziData;
+  const {
+    eightChar,
+    dayGan,
+    dayGanWuxing,
+    wuxingCounts,
+    dayyun,
+    solarDate,
+    lunarDate,
+    gender,
+    genderText,
+    occupation,
+    maritalStatus,
+  } = baziData;
 
   const genderDisplay = genderText || (gender === 'female' ? '坤造（女）' : '乾造（男）');
+  const occupationDisplay = occupation && occupation.trim() !== '' ? occupation.trim() : '未提供（請根據八字格局推斷適合行業）';
+  const maritalDisplay = maritalStatus && maritalStatus.trim() !== '' ? maritalStatus.trim() : '未提供';
 
   const allTenGods: string[] = [
     eightChar.year.ganShishen,
@@ -97,6 +111,8 @@ function buildBaziText(baziData: any, userNotes?: string) {
 【陽曆日期】：${solarDate}
 【農曆日期】：${lunarDate}
 【命主性別】：${genderDisplay}
+【現時職業】：${occupationDisplay}
+【現時婚姻/感情狀態】：${maritalDisplay}
 【日主（日干）】：${dayGan}（五行屬${dayGanWuxing}）
 
 【四柱八字與十神藏干】：
@@ -176,12 +192,13 @@ export async function POST(req: Request) {
       initialSystemPrompt = `${baseExpertPersona}
 
 【分析任務】：請針對命主八字進行【${targetGanZhiStr} 流年整體運勢解盤】。
+請務必結合命主的【現時職業】與【現時婚姻/感情狀態】進行深度的流年演繹。
 
 請嚴格分成以下六部分，並以 Markdown 格式輸出：
 ### 一、 流年整體運勢總評（流年 ${targetGanZhiStr} 干支對日主、大運及原局八字之生剋制化與衝合會刑穿分析）
-### 二、 事業與工作運勢推演
+### 二、 事業與工作運勢推演（結合現時職業分析流年發展方向與轉職風險）
 ### 三、 財運走勢與投資理財風險分析
-### 四、 感情婚姻與人際關係吉凶
+### 四、 感情婚姻與人際關係吉凶（結合現時婚姻/感情狀態推算桃花或夫妻感情磨合）
 ### 五、 健康狀況與安全注意事項
 ### 六、 全年吉凶月份提醒與趨吉避凶錦囊`;
 
@@ -190,8 +207,9 @@ export async function POST(req: Request) {
       initialSystemPrompt = `${baseExpertPersona}
 
 【分析任務】：請針對命主於【${targetGanZhiStr}】提出之特定問題【${question || '流年吉凶問事'}】進行【流年問事精準解答】。
+請結合命主的【現時職業】與【現時婚姻/感情狀態】提供切合現實狀況的解答。
 
-請嚴格分成以下三部分，並以 Markdown 格式輸出：
+請嚴格分成以下二部分，並以 Markdown 格式輸出：
 ### 一、 針對問題之流年吉凶明確斷語（直指好壞、變動或順逆）
 ### 二、 具體應對方針與趨吉避凶行動建議`;
 
@@ -204,6 +222,10 @@ export async function POST(req: Request) {
 - 必須嚴格根據資料中的【命主性別】進行批斷，絕不可寫出「假設命主為男/女」或「假設」等字眼。
 - 若性別為「乾造（男）」，第四點感情婚姻必須直接以正財/偏財為妻星、日支為妻宮和參照內部參考法則和滴天髓徵義進行確切論述。
 - 若性別為「坤造（女）」，第四點感情婚姻必須直接參照內部參考法則和滴天髓徵義女命篇進行確切論述。
+- **感情婚姻現狀考量**：必須結合命主輸入的【現時婚姻/感情狀態】（如：已婚、單身、有穩定伴侶、離異）提供針對性的結婚時機、夫妻磨合或桃花防範建議。
+
+【職業與事業批斷約束】：
+- 必須結合命主提供的【現時職業】，對照八字喜用神與十神格局，分析其當前行業之利弊，並給出事業升遷、轉型或跳槽之建議。
 
 【命理分析穩定性與一致性約束】：
 1. 【確定性推導原則】：相同八字原局必須導出唯一的日主用神判定，嚴禁在不同批算中出現矛盾結論。
@@ -232,11 +254,11 @@ ${ADMIN_REFERENCE_DOCS}
 
 ### 四、 分析命主的出身，事業，感情和健康
 - 利用原局八字，分析命主的出身，家境和學業成績。（參考內部參考法則、滴天髓徵義對格局的評論，子平一得蔡進源師傅的命例，留意驛馬星或八字四柱有沒有天尅地沖，如有，要留意命主有沒有出國讀書的機會，分析原局八字和大運對命主出身，家境和學業成績的影響。）
-- 分析命主的事業和工作情況。用原局八字配合大運，配合十神含意和生尅制化，詳細推斷和解釋那一個大運對命主最為有利和特別需要注意的地方，批算時一定要先參考內部法則，滴天髓徵義對格局的評論，子平一得蔡進源師傅評註中的命例，留意有沒有驛馬，如有驛馬，要留意命主會否有到國外工作之類的機會，推論大運有什麼事發生
-- 先確認【命主性別】是乾造（男）還是坤造（女）。分析感情狀況時，直接以男命財星/女命官殺星確切論述，嚴禁寫「假設」。配合內部參考法則與滴天髓徵義女命篇，詳細解釋那一個時候最易有桃花和真姻緣出現，觀察妻星或夫星有沒有在大運或流年出現，或地支六合、會局或沖合夫妻宮。
+- 分析命主的事業和工作情況。結合命主的【現時職業】，用原局八字配合大運，配合十神含意和生尅制化，詳細推斷和解釋那一個大運對命主最為有利和特別需要注意的地方，批算時一定要先參考內部法則，滴天髓徵義對格局的評論，子平一得蔡進源師傅評註中的命例，留意有沒有驛馬，如有驛馬，要留意命主會否有到國外工作之類的機會，推論大運有什麼事發生
+- 先確認【命主性別】是乾造（男）還是坤造（女），並結合【現時婚姻/感情狀態】。分析感情狀況時，直接以男命財星/女命官殺星確切論述，嚴禁寫「假設」。配合內部參考法則與滴天髓徵義女命篇，詳細解釋那一個時候最易有桃花和真姻緣出現，觀察妻星或夫星有沒有在大運或流年出現，或地支六合、會局或沖合夫妻宮。
 
 ### 五、 選前 1個，後4個主要大運，詳細評估大運干支對原局用神的影響，跟據十神含意，批斷該大運否能會發生的吉事和凶事，並且提供解決方法
-- 參考提到所有精通的八字書藉和內部參考法則，詳細分析原局八字加大運配合流年對命主事業、感情、健康的影響，利用十神含意推論產生的象，詳細，專業和嚴謹地推斷和解釋有機會發生什麼事，是吉是凶，提供趨吉避凶的方法，以point form形式列出
+- 參考提到所有精通的八字書藉和內部參考法則，詳細分析原局八字加大運配合流年對命主事業、感情、健康的影響，利用十神含意推論產生的象，詳細，專業和嚴謹地推斷和解釋有機會發生什麼事，是吉是凶，提供趨吉避凶的方法，以 point form 形式列出
 
 ### 六、 當下流年運勢評語
 - 利用日主所輸入的出生日期，結合八字命盤，配合大運及流年，利用十神含意，生尅制化，詳細推斷對命主該年流年運勢的影響，包括吉凶、變化與可能的發展方向，並提供趨吉避凶的方法，只需要2026的流年，不需要其他年份
@@ -477,23 +499,22 @@ ${ADMIN_REFERENCE_DOCS}
 【審閱與嚴格修正要求】：
 1. 對比 DeepSeek、Qwen 與 Grok 的初批草稿，消除內部矛盾，確保用神與喜忌一貫，100% 遵照古典子平與內部法則。
 2. 確保內容完全符合命主實際性別（男命論妻、女命論夫），完全刪除任何「假設命主為男/女」等字眼。
-3. 嚴格維持與當前功能類型（${type === 'yearly' ? '【流年整體運勢】' : type === 'yearly_qa' ? '【流年問事解答】' : '【原局深度解盤】'}）相匹配的 Markdown 章節結構輸出。
-4. 只顯示命主的最終精緻批命報告，絕對不要顯示初批修正過程、審閱說明或對比過程，後台管理員模式除外，在後台中需全部顯示
-5. 嚴格對照【原八字排盤數據】與【內部參考規範】，對比 DeepSeek、Qwen 與 Grok 對於「用神、格局、病藥、喜忌」的判定。若有分歧，必須依據《造化元鑰》十干月令喜忌與《子平一得》為唯一標準進行裁決，確定唯一的格局與用神，嚴禁出現前後矛盾，用神不等於調候用神。
-6. 檢查初批報告有無「十神生剋錯誤」、「天干合化誤判」或「前後喜用神不一致」等邏輯矛盾，在批斷大運和流年吉凶等事情，是否有所遺漏錯誤，如有，應作出補註或修改。
-7. 檢查「格局」與「用神」是否唯一，嚴禁同時出現兩種矛盾格局判定。
-8. 出身、事業、感情和健康須要更專業、更詳盡解釋每個可能性給命主知道，如初級報告沒有提及或有遺漏，需要修改和補註。
-9. 請完全保留「六大章節 (### 一、至 ### 六、)」Markdown 格式輸出。
+3. 務必結合命主輸入的【現時職業】與【現時婚姻/感情狀態】進行具體針對性的事業與婚姻分析。
+4. 嚴格維持與當前功能類型（${type === 'yearly' ? '【流年整體運勢】' : type === 'yearly_qa' ? '【流年問事解答】' : '【原局深度解盤】'}）相匹配的 Markdown 章節結構輸出。
+5. 只顯示命主的最終精緻批命報告，絕對不要顯示初批修正過程、審閱說明或對比過程。
+6. 嚴格對照【原八字排盤數據】與【內部參考規範】，對比 DeepSeek、Qwen 與 Grok 對於「用神、格局、病藥、喜忌」的判定。若有分歧，必須依據《造化元鑰》十干月令喜忌與《子平一得》為唯一標準進行裁決，確定唯一的格局與用神，嚴禁出現前後矛盾，用神不等於調候用神。
+7. 檢查初批報告有無「十神生剋錯誤」、「天干合化誤判」或「前後喜用神不一致」等邏輯矛盾，在批斷大運和流年吉凶等事情，是否有所遺漏錯誤，如有，應作出補註或修改。
+8. 檢查「格局」與「用神」是否唯一，嚴禁同時出現兩種矛盾格局判定。
+9. 出身、事業、感情和健康須要更專業、更詳盡解釋每個可能性給命主知道，如初級報告沒有提及或有遺漏，需要修改和補註。
 10. 排盤後，原局八字的天干和地支本氣有殺星，必須嚴格遵從有殺先論殺的所有規定，有殺先論殺凌駕所有法則，傷官當令除外。
 11. 批斷時必定要遵從所有內部參考規則。
 12. 地支除本氣和月令藏元外，其他一律不可以做用神。
-13. 原局內有殺星，必須遵從有殺先論殺的所有規定，只比較日元和殺的強弱，原論身強弱，殺弱就是以財滋殺，殺為用神，殺強就制殺或以印化殺，不能殺弱但以印化殺或制殺，用神和藥神要分清楚
-14. 收列初批草稿後，必須先嚴格審查所有批斷是否嚴格遵從所有列出的規則，如沒有就需要修改及補註。
-15. 必須清楚判斷用神，忌神，和藥神，不容任何錯誤，用神是原局中有用之神，忌神是尅用神之神，藥神是醫病之神。
-16. 食神制殺格和傷官架殺格不能見印星，食神制殺若逢梟，非貧即夭，殺印相生格不能見財星，因為儲財破印。
-17. 有殺先論殺第一步必須先比較日元和殺的強弱，比較方法可直接對比八字裡的數量，是殺多還是日元比劫多，是否當令，有沒有長生和庫等因素，殺星有沒有根，有沒有透出，有沒有被制化，有沒有被合化，有沒有被沖合等。
-18. 用字盡量淺易，令一般人容易明白，減少使用專業用語，避免使用過於深奧的詞彙，但仍需要保持專業，嚴謹和詳細的態度，去解析命盤和清晰地向命主表達
-19. 每個新段落要用分隔線隔開，使人容易閱讀和理解。
+13. 原局內有殺星，必須遵從有殺先論殺的所有規定，只比較日元和殺的強弱，原論身強弱，殺弱就是以財滋殺，殺為用神，殺強就制殺或以印化殺，不能殺弱但以印化殺或制殺，用神和藥神要分清楚。
+14. 必須清楚判斷用神，忌神，和藥神，不容任何錯誤，用神是原局中有用之神，忌神是尅用神之神，藥神是醫病之神。
+15. 食神制殺格和傷官架殺格不能見印星，食神制殺若逢梟，非貧即夭，殺印相生格不能見財星，因為儲財破印。
+16. 用字盡量淺易，令一般人容易明白，減少使用專業用語，避免使用過於深奧的詞彙，但仍需要保持專業，嚴謹和詳細的態度。
+17. 每個新段落要用分隔線隔開，使人容易閱讀和理解。
+18. 嚴禁使用朱雀橋派系裡面入向理論。
 
 --------------------------------------------------
 【原八字排盤數據與內部規範】：
@@ -510,40 +531,44 @@ ${draftGrok || '（xAI Grok 未回應）'}
 --------------------------------------------------
 `.trim();
 
-      // 修正：更正為 Google 官方標準的模型名稱 gemini-1.5-flash
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-4-argon:generateContent?key=${geminiKey}`;
+      // 優先調用 Gemini，若 gemini-4-argon 無回應則回退至 gemini-3.8-flash
+      const geminiModels = ['gemini-4-argon', 'gemini-3.8-flash', 'gemini-1.5-pro'];
 
-      try {
-        const geminiResponse = await fetch(geminiUrl, {
-          method: 'POST',
-          signal: AbortSignal.timeout(280000),
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: geminiPrompt }] }],
-            safetySettings: [
-              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-            ],
-            generationConfig: { temperature: 0.0 },
-          }),
-        });
+      for (const model of geminiModels) {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+        try {
+          const geminiResponse = await fetch(geminiUrl, {
+            method: 'POST',
+            signal: AbortSignal.timeout(280000),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: geminiPrompt }] }],
+              safetySettings: [
+                { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+              ],
+              generationConfig: { temperature: 0.0 },
+            }),
+          });
 
-        if (geminiResponse.ok) {
-          const geminiData = await geminiResponse.json();
-          const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (text && text.trim() !== '') {
-            finalReport = text;
-            geminiUsed = true;
-            console.log('✅ Gemini 大師終極校訂成功！');
+          if (geminiResponse.ok) {
+            const geminiData = await geminiResponse.json();
+            const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text && text.trim() !== '') {
+              finalReport = text;
+              geminiUsed = true;
+              console.log(`✅ Gemini (${model}) 大師終極校訂成功！`);
+              break;
+            }
+          } else {
+            const err = await geminiResponse.text();
+            executionErrors[`Gemini(${model})`] = `HTTP ${geminiResponse.status}: ${err}`;
           }
-        } else {
-          const err = await geminiResponse.text();
-          executionErrors['Gemini'] = `HTTP ${geminiResponse.status}: ${err}`;
+        } catch (err: any) {
+          executionErrors[`Gemini(${model})`] = `網路異常: ${err.message}`;
         }
-      } catch (err: any) {
-        executionErrors['Gemini'] = `網路異常: ${err.message}`;
       }
     } else {
       executionErrors['Gemini'] = '未設定 GEMINI_API_KEY';
