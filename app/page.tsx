@@ -24,6 +24,8 @@ import {
   MessageSquare,
   Send,
   CalendarDays,
+  Briefcase,
+  Heart,
 } from 'lucide-react';
 
 // 命盤型別定義
@@ -41,6 +43,8 @@ export interface BaziResult {
   };
   wuxingCounts: { 木: number; 火: number; 土: number; 金: number; 水: number };
   dayyun: Array<{ age: number; ganZhi: string }>;
+  occupation?: string;
+  maritalStatus?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -332,6 +336,14 @@ const LOCATION_OPTIONS = [
   { value: '103.81', label: '新加坡 (東經 103.81°)' },
 ];
 
+const MARITAL_OPTIONS = [
+  { value: '單身未婚', label: '單身未婚' },
+  { value: '有穩定伴侶（未婚）', label: '有穩定伴侶（未婚）' },
+  { value: '已婚', label: '已婚' },
+  { value: '離異', label: '離異' },
+  { value: '喪偶', label: '喪偶' },
+];
+
 function BaziForm({
   onSubmit,
   loading,
@@ -347,6 +359,8 @@ function BaziForm({
     calendar: 'solar' | 'lunar';
     trueSolar: string;
     longitude: string;
+    occupation: string;
+    maritalStatus: string;
   }) => void;
   loading: boolean;
 }) {
@@ -361,6 +375,10 @@ function BaziForm({
   const [hour, setHour] = useState('14');
   const [minute, setMinute] = useState('0');
 
+  // 職業與婚姻狀態欄位
+  const [occupation, setOccupation] = useState('');
+  const [maritalStatus, setMaritalStatus] = useState('單身未婚');
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit({
@@ -374,6 +392,8 @@ function BaziForm({
       calendar,
       trueSolar,
       longitude,
+      occupation: occupation.trim(),
+      maritalStatus,
     });
   };
 
@@ -385,7 +405,7 @@ function BaziForm({
         </span>
         <div>
           <h2 className="font-serif text-lg font-medium text-slate-100">命主資料</h2>
-          <p className="text-xs text-slate-400">填寫出生資訊以生成命盤</p>
+          <p className="text-xs text-slate-400">填寫出生資訊與背景以生成精準命盤</p>
         </div>
       </div>
 
@@ -499,6 +519,26 @@ function BaziForm({
           />
         </div>
 
+        {/* 現時職業與婚姻狀態欄位 */}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5 w-full">
+            <span className="text-xs font-medium text-slate-400">現時職業（選填）</span>
+            <input
+              value={occupation}
+              onChange={(e) => setOccupation(e.target.value)}
+              placeholder="例如：IT、金融、創業、學生..."
+              className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-amber-500/80 focus:ring-1 focus:ring-amber-500/40"
+            />
+          </label>
+
+          <SelectField
+            label="現時婚姻/感情狀態"
+            value={maritalStatus}
+            onChange={setMaritalStatus}
+            options={MARITAL_OPTIONS}
+          />
+        </div>
+
         {/* 真太陽時校正與經度選單 */}
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <SelectField
@@ -564,7 +604,6 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
         <span className="text-[11px] sm:text-xs text-slate-400">（右起：年柱 ➔ 月柱 ➔ 日柱 ➔ 時柱）</span>
       </div>
 
-      {/* 手機版支援橫向滾動，確保在超窄手機螢幕上不擠壓錯位 */}
       <div className="w-full overflow-x-auto pb-2 -mx-1 px-1">
         <div className="flex min-w-[560px] sm:min-w-0 flex-row-reverse gap-2 sm:gap-3 items-stretch">
           {pillars.map((p) => {
@@ -830,7 +869,6 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
     window.print();
   };
 
-  // 可選年份選單 (2024 至 2035)
   const YEAR_OPTIONS = Array.from({ length: 12 }, (_, i) => 2024 + i);
 
   return (
@@ -929,7 +967,6 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
             {deepLoading ? 'AI 四大典籍會診推演中…' : deepReport ? '重新生成 AI 深度解盤' : '生成 AI 原局深度解盤'}
           </button>
 
-          {/* 報告展示 */}
           {deepReport ? (
             <div className="mt-2 flex flex-col gap-3 rounded-xl bg-slate-950/60 border border-slate-800 p-4 sm:p-5">
               <Quote className="size-4 text-amber-500/60 print:hidden" />
@@ -989,7 +1026,6 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
               : `推算【${getYearGanZhi(targetYear)}】流年運勢`}
           </button>
 
-          {/* 報告展示 */}
           {yearlyReport ? (
             <div className="mt-2 flex flex-col gap-3 rounded-xl bg-slate-950/60 border border-slate-800 p-4 sm:p-5">
               <Quote className="size-4 text-amber-500/60 print:hidden" />
@@ -1013,7 +1049,6 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
       {/* ==================== 功能 3：流年問事 ==================== */}
       {activeTab === 'yearly_qa' && (
         <div className="mt-5 flex flex-col gap-4">
-          {/* 流年年份選擇 */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-slate-950 p-3.5 border border-slate-800">
             <div className="flex items-center gap-2">
               <HelpCircle className="size-4 text-amber-400 shrink-0" />
@@ -1036,7 +1071,6 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
             </div>
           </div>
 
-          {/* 快捷提問選項 */}
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-slate-400">快捷熱門提問：</span>
             <div className="flex flex-wrap gap-1.5">
@@ -1056,7 +1090,6 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
             </div>
           </div>
 
-          {/* 自訂問題輸入框 */}
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-slate-400">自訂問題提問：</span>
             <div className="relative w-full">
@@ -1080,7 +1113,6 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
             {qaLoading ? `AI 推算【${getYearGanZhi(qaYear)}】解答中…` : `提問【${getYearGanZhi(qaYear)}】特定流年吉凶`}
           </button>
 
-          {/* 報告展示 */}
           {qaReport ? (
             <div className="mt-2 flex flex-col gap-3 rounded-xl bg-slate-950/60 border border-slate-800 p-4 sm:p-5">
               <div className="flex items-center gap-2 border-b border-slate-800/80 pb-2.5">
@@ -1128,6 +1160,8 @@ export default function Page() {
     gender: 'male' | 'female';
     trueSolar: string;
     longitude: string;
+    occupation: string;
+    maritalStatus: string;
   }) => {
     setLoading(true);
     setTimeout(() => {
@@ -1141,7 +1175,11 @@ export default function Page() {
         formData.trueSolar === 'on',
         Number(formData.longitude)
       );
-      setBaziData(result);
+      setBaziData({
+        ...result,
+        occupation: formData.occupation,
+        maritalStatus: formData.maritalStatus,
+      });
       setUserNotes('');
       setLoading(false);
     }, 300);
@@ -1189,6 +1227,24 @@ export default function Page() {
           <div className="w-full min-w-0">
             {baziData ? (
               <div className="flex w-full min-w-0 flex-col gap-5">
+                {/* 背景簡介卡片 */}
+                {(baziData.occupation || baziData.maritalStatus) && (
+                  <div className="flex flex-wrap items-center gap-4 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-2.5 text-xs text-amber-200">
+                    {baziData.occupation && (
+                      <span className="flex items-center gap-1.5">
+                        <Briefcase className="size-3.5 text-amber-400" />
+                        職業：<strong className="text-slate-100">{baziData.occupation}</strong>
+                      </span>
+                    )}
+                    {baziData.maritalStatus && (
+                      <span className="flex items-center gap-1.5">
+                        <Heart className="size-3.5 text-amber-400" />
+                        感情/婚姻狀態：<strong className="text-slate-100">{baziData.maritalStatus}</strong>
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 <FourPillars pillars={pillars} trueSolarText={baziData.trueSolarText} />
                 <PillarDetails pillars={pillars} distribution={distribution} luck={luck} />
                 <AiAnalysis baziData={baziData} userNotes={userNotes} />
