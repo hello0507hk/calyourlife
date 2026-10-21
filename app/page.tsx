@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { calculateBazi } from '@/lib/bazi';
+import { calculateQizheng, QizhengChart } from '@/lib/qizheng';
 import {
   ChevronDown,
   Compass,
@@ -26,9 +27,11 @@ import {
   CalendarDays,
   Briefcase,
   Heart,
+  Star,
+  Globe,
 } from 'lucide-react';
 
-// 命盤型別定義
+// 命盤型別定義（擴充七政四餘欄位）
 export interface BaziResult {
   solarDate: string;
   lunarDate: string;
@@ -45,6 +48,12 @@ export interface BaziResult {
   dayyun: Array<{ age: number; ganZhi: string }>;
   occupation?: string;
   maritalStatus?: string;
+  birthYear?: number;
+  birthMonth?: number;
+  birthDay?: number;
+  birthHour?: number;
+  longitude?: number;
+  qizhengData?: QizhengChart;
 }
 
 /* ------------------------------------------------------------------ */
@@ -244,7 +253,7 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
 
         <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs font-medium tracking-widest text-amber-300 backdrop-blur">
           <Sparkles className="size-3.5 text-amber-400" />
-          正宗子平八字 · 天文真太陽時 · 多模型 AI 聯合會診
+          星平合參 (子平八字 + 七政四餘) · 多模型 AI 聯合會診
         </div>
 
         <h1 className="mb-4 font-serif text-5xl font-medium tracking-tight text-slate-100 sm:text-7xl">
@@ -254,12 +263,12 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
         </h1>
 
         <p className="max-w-2xl font-serif text-lg leading-relaxed text-amber-200/90 sm:text-xl">
-          「天地玄黃，陰陽相生；四柱八字，藏一生通變之理。」
+          「天地玄黃，星平合參；四柱藏通變，七政定吉凶。」
         </p>
 
         <p className="mt-4 max-w-xl font-serif text-xs leading-relaxed text-slate-400 sm:text-sm">
-          洞察天干地支之生克，推演五行旺衰與大運走勢。
-          深得《滴天髓》、《造化元鑰》、《神峰通考》與《子平一得》之真傳，
+          結合「子平八字」定格局大運與五行喜忌，配搭「七政四餘」天象十一曜鎖定事件應驗點。
+          深得《滴天髓》、《造化元鑰》、《子平一得》與《鄭氏星案》之真傳，
           知命順勢，趨吉避凶。
         </p>
 
@@ -269,15 +278,15 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
             onClick={onEnter}
             className="group relative inline-flex items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-9 py-4 font-serif text-lg font-semibold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.3)] transition-all duration-300 hover:scale-105 hover:shadow-[0_0_45px_rgba(245,158,11,0.5)] active:scale-95"
           >
-            <span>進入命盤排盤</span>
+            <span>進入星平命盤排盤</span>
             <ArrowRight className="size-5 transition-transform duration-300 group-hover:translate-x-1" />
           </button>
         </div>
 
         <div className="mt-16 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-500">
-          <span className="flex items-center gap-1.5"><Compass className="size-3.5 text-amber-500/70" /> 子平正宗排盤</span>
+          <span className="flex items-center gap-1.5"><Compass className="size-3.5 text-amber-500/70" /> 子平正宗 + 七政四餘</span>
           <span>•</span>
-          <span className="flex items-center gap-1.5"><Clock className="size-3.5 text-amber-500/70" /> 經度與天文均時差校正</span>
+          <span className="flex items-center gap-1.5"><Clock className="size-3.5 text-amber-500/70" /> 經度與天文真太陽時校正</span>
           <span>•</span>
           <span className="flex items-center gap-1.5"><WandSparkles className="size-3.5 text-amber-500/70" /> Gemini / DeepSeek / Qwen / Grok 四 AI 會診</span>
         </div>
@@ -405,7 +414,7 @@ function BaziForm({
         </span>
         <div>
           <h2 className="font-serif text-lg font-medium text-slate-100">命主資料</h2>
-          <p className="text-xs text-slate-400">填寫出生資訊與背景以生成精準命盤</p>
+          <p className="text-xs text-slate-400">填寫出生資訊與背景以生成八字與七政星盤</p>
         </div>
       </div>
 
@@ -566,7 +575,7 @@ function BaziForm({
           className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-3 text-sm font-medium text-slate-950 shadow-lg shadow-amber-500/10 transition-all hover:bg-amber-400 active:bg-amber-600 disabled:opacity-70"
         >
           <Sparkles className="size-4" />
-          {loading ? '排盤中…' : '書籍比對與聯合排盤'}
+          {loading ? '排盤中…' : '星平合參排盤與 AI 會診'}
         </button>
       </div>
     </form>
@@ -682,6 +691,76 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
             );
           })}
         </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 七政四餘 12 宮位星盤視覺化組件                                       */
+/* ------------------------------------------------------------------ */
+
+function QizhengGrid({ data }: { data: QizhengChart }) {
+  return (
+    <section className="rounded-2xl border border-amber-500/30 bg-slate-900/90 p-5 shadow-xl">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex size-6 items-center justify-center rounded-md bg-amber-500/20 text-amber-400">
+            <Star className="size-4" />
+          </span>
+          <h3 className="font-serif text-base font-medium text-slate-100">七政四餘十二宮星盤 (星平合參)</h3>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-amber-300 font-medium">
+          <span>{data.mingGong}</span>
+          <span>•</span>
+          <span>{data.shenGong}</span>
+        </div>
+      </div>
+
+      {/* 十二宮位 4x3 網格展示 */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        {data.houses.map((house, idx) => {
+          const isMing = house.name === '命宮';
+          const isGuan = house.name === '官祿宮';
+          const isCai = house.name === '財帛宮';
+          const isFu = house.name === '夫妻宮';
+
+          return (
+            <div
+              key={idx}
+              className={`border p-2.5 rounded-xl flex flex-col justify-between min-h-[90px] transition-colors ${
+                isMing
+                  ? 'border-amber-500/80 bg-amber-950/30'
+                  : isGuan || isCai || isFu
+                  ? 'border-amber-500/30 bg-slate-800/80'
+                  : 'border-slate-800 bg-slate-950/60'
+              }`}
+            >
+              <div className="flex justify-between items-center font-bold">
+                <span className={isMing ? 'text-amber-300 font-extrabold' : 'text-slate-200'}>
+                  {house.name}
+                  {isMing && <span className="ml-1 text-[10px] text-amber-400">(立命)</span>}
+                </span>
+                <span className="text-slate-500 text-[10px]">{house.zodiac}</span>
+              </div>
+
+              <div className="mt-2 flex flex-wrap gap-1">
+                {house.stars.length > 0 ? (
+                  house.stars.map((star) => (
+                    <span
+                      key={star}
+                      className="inline-block bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                    >
+                      {star}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-slate-600 text-[10px]">無主星</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </section>
   );
@@ -880,7 +959,7 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
             <Sparkles className="size-4" />
             <span className="text-xs font-medium tracking-widest uppercase">AI 命理推演中心</span>
           </div>
-          <h2 className="font-serif text-xl font-bold text-slate-100">三大 AI 命理會診功能</h2>
+          <h2 className="font-serif text-xl font-bold text-slate-100">三大 AI 星平合參會診功能</h2>
         </div>
 
         {/* 列印／PDF 按鈕 */}
@@ -954,7 +1033,7 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
       {activeTab === 'deep' && (
         <div className="mt-5 flex flex-col gap-4">
           <p className="text-xs text-slate-400 leading-relaxed">
-            結合四柱八字格局、日主旺衰、喜用神定位，精準推算一生事業、財運、婚姻與健康總論。
+            結合四柱八字格局、日主旺衰、喜用神定位，與七政四餘星曜落宮進行雙重會診，精準推算一生事業、財運、婚姻與健康總論。
           </p>
 
           <button
@@ -964,7 +1043,7 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-slate-950 transition-all hover:bg-amber-400 disabled:opacity-70 print:hidden shadow-lg shadow-amber-500/10"
           >
             <WandSparkles className="size-4 text-slate-950" />
-            {deepLoading ? 'AI 四大典籍會診推演中…' : deepReport ? '重新生成 AI 深度解盤' : '生成 AI 原局深度解盤'}
+            {deepLoading ? 'AI 星平合參典籍會診推演中…' : deepReport ? '重新生成 AI 深度解盤' : '生成 AI 星平合參深度解盤'}
           </button>
 
           {deepReport ? (
@@ -980,7 +1059,7 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
                 <span className="inline-flex size-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-400">
                   <WandSparkles className="size-5" />
                 </span>
-                <p className="text-xs text-slate-400">點擊上方按鈕，AI 將為你推算八字原局與格局總論。</p>
+                <p className="text-xs text-slate-400">點擊上方按鈕，AI 將為你推算子平八字與七政星盤總論。</p>
               </div>
             )
           )}
@@ -1020,7 +1099,7 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
           >
             <CalendarDays className="size-4 text-slate-950" />
             {yearlyLoading
-              ? `推算【${getYearGanZhi(targetYear)}】運勢中…`
+              ? `推算【${getYearGanZhi(targetYear)}】星平運勢中…`
               : yearlyReport
               ? `重新推算【${getYearGanZhi(targetYear)}】流年運勢`
               : `推算【${getYearGanZhi(targetYear)}】流年運勢`}
@@ -1039,7 +1118,7 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
                 <span className="inline-flex size-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-400">
                   <CalendarDays className="size-5" />
                 </span>
-                <p className="text-xs text-slate-400">選擇年份並點擊按鈕，推算該流年之吉凶細節與月份提示。</p>
+                <p className="text-xs text-slate-400">選擇年份並點擊按鈕，推算該流年之星曜沖合與吉凶細節。</p>
               </div>
             )
           )}
@@ -1165,6 +1244,7 @@ export default function Page() {
   }) => {
     setLoading(true);
     setTimeout(() => {
+      // 1. 計算子平八字
       const result = calculateBazi(
         Number(formData.year),
         Number(formData.month),
@@ -1175,10 +1255,26 @@ export default function Page() {
         formData.trueSolar === 'on',
         Number(formData.longitude)
       );
+
+      // 2. 計算七政四餘星盤
+      const qizheng = calculateQizheng(
+        Number(formData.year),
+        Number(formData.month),
+        Number(formData.day),
+        Number(formData.hour),
+        Number(formData.longitude)
+      );
+
       setBaziData({
         ...result,
+        birthYear: Number(formData.year),
+        birthMonth: Number(formData.month),
+        birthDay: Number(formData.day),
+        birthHour: Number(formData.hour),
+        longitude: Number(formData.longitude),
         occupation: formData.occupation,
         maritalStatus: formData.maritalStatus,
+        qizhengData: qizheng,
       });
       setUserNotes('');
       setLoading(false);
@@ -1205,7 +1301,7 @@ export default function Page() {
             </span>
             <div>
               <h1 className="font-serif text-xl font-medium tracking-tight text-slate-100 sm:text-2xl">算命網</h1>
-              <p className="text-[10px] text-slate-400">四柱八字 · 典籍比對 · AI 會診</p>
+              <p className="text-[10px] text-slate-400">星平合參 (子平八字 + 七政四餘) · AI 會診</p>
             </div>
           </div>
 
@@ -1245,8 +1341,16 @@ export default function Page() {
                   </div>
                 )}
 
+                {/* 1. 子平八字四柱展現 */}
                 <FourPillars pillars={pillars} trueSolarText={baziData.trueSolarText} />
+
+                {/* 2. 七政四餘十二宮星盤展現 */}
+                {baziData.qizhengData && <QizhengGrid data={baziData.qizhengData} />}
+
+                {/* 3. 五行分佈與大運走勢 */}
                 <PillarDetails pillars={pillars} distribution={distribution} luck={luck} />
+
+                {/* 4. AI 命理會診中心 */}
                 <AiAnalysis baziData={baziData} userNotes={userNotes} />
               </div>
             ) : (
@@ -1255,8 +1359,8 @@ export default function Page() {
                   <Moon className="size-5" />
                 </span>
                 <div className="flex flex-col gap-0.5">
-                  <p className="font-serif text-base font-medium text-slate-200">等待排盤</p>
-                  <p className="max-w-xs text-xs text-slate-400">填寫左側命主資料並點擊「書籍比對與聯合排盤」，命盤結果將顯示於此。</p>
+                  <p className="font-serif text-base font-medium text-slate-200">等待星平排盤</p>
+                  <p className="max-w-xs text-xs text-slate-400">填寫左側命主資料並點擊「星平合參排盤與 AI 會診」，命盤結果將顯示於此。</p>
                 </div>
               </div>
             )}
