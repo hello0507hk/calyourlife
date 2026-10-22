@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { calculateBazi } from '@/lib/bazi';
-import { calculateQizheng, QizhengChart, StarPosition } from '@/lib/qizheng';
+import { calculateQizheng, QizhengChart } from '@/lib/qizheng';
 import QizhengChartSVG from '@/components/QizhengChartSVG';
 import {
   ChevronDown,
@@ -10,24 +10,12 @@ import {
   Mars,
   Moon,
   PieChart,
-  Quote,
   Sparkles,
   TrendingUp,
   User,
   Venus,
-  WandSparkles,
-  Calendar as CalendarIcon,
-  Printer,
-  FileDown,
   Clock,
   ArrowRight,
-  Home,
-  HelpCircle,
-  MessageSquare,
-  Send,
-  CalendarDays,
-  Briefcase,
-  Heart,
   Star,
   Eye,
   Grid,
@@ -109,13 +97,6 @@ interface LuckPeriod {
   current?: boolean;
 }
 
-function getYearGanZhi(year: number): string {
-  const stems = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
-  const branches = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
-  const offset = year - 4;
-  return `${year} ${stems[(offset % 10 + 10) % 10]}${branches[(offset % 12 + 12) % 12]}年`;
-}
-
 function mapBaziToPillars(bazi: BaziResult): Pillar[] {
   const keys: PillarKey[] = ['year', 'month', 'day', 'hour'];
   const labels = ['年柱', '月柱', '日柱', '時柱'];
@@ -170,224 +151,6 @@ function mapBaziToLuck(dayyun: BaziResult['dayyun']): LuckPeriod[] {
       current: idx === 0,
     };
   });
-}
-
-/* ------------------------------------------------------------------ */
-/* 視覺震撼：七政四餘圓形天象儀 SVG 組件 (QizhengChartSVG)             */
-/* ------------------------------------------------------------------ */
-
-function QizhengChartSVG({ data }: { data: QizhengChart }) {
-  const size = 520;
-  const center = size / 2;
-  const outerR = 230;
-  const zodiacR = 185;
-  const starBaseR = 135;
-  const innerR = 75;
-
-  // 十二黃道宮分區與名稱
-  const ZODIAC_SECTORS = [
-    { label: '戌 (白羊)', branch: '戌' },
-    { label: '酉 (金牛)', branch: '酉' },
-    { label: '申 (雙子)', branch: '申' },
-    { label: '未 (巨蟹)', branch: '未' },
-    { label: '午 (獅子)', branch: '午' },
-    { label: '巳 (處女)', branch: '巳' },
-    { label: '辰 (天秤)', branch: '辰' },
-    { label: '卯 (天蠍)', branch: '卯' },
-    { label: '寅 (射手)', branch: '寅' },
-    { label: '丑 (摩羯)', branch: '丑' },
-    { label: '子 (水瓶)', branch: '子' },
-    { label: '亥 (雙魚)', branch: '亥' },
-  ];
-
-  // 星曜顏色映射表
-  const STAR_COLORS: Record<string, { fill: string; stroke: string; halo: string }> = {
-    太陽: { fill: '#fbbf24', stroke: '#f59e0b', halo: 'rgba(251, 191, 36, 0.4)' },
-    太陰: { fill: '#e0f2fe', stroke: '#38bdf8', halo: 'rgba(56, 189, 248, 0.4)' },
-    木星: { fill: '#34d399', stroke: '#10b981', halo: 'rgba(52, 211, 153, 0.4)' },
-    火星: { fill: '#f87171', stroke: '#ef4444', halo: 'rgba(248, 113, 113, 0.4)' },
-    土星: { fill: '#fbbf24', stroke: '#d97706', halo: 'rgba(217, 119, 6, 0.4)' },
-    金星: { fill: '#f1f5f9', stroke: '#cbd5e1', halo: 'rgba(241, 245, 249, 0.4)' },
-    水星: { fill: '#60a5fa', stroke: '#3b82f6', halo: 'rgba(96, 165, 250, 0.4)' },
-    羅睺: { fill: '#c084fc', stroke: '#a855f7', halo: 'rgba(192, 132, 252, 0.4)' },
-    計都: { fill: '#f472b6', stroke: '#ec4899', halo: 'rgba(244, 114, 182, 0.4)' },
-    月孛: { fill: '#38bdf8', stroke: '#0284c7', halo: 'rgba(56, 189, 248, 0.4)' },
-    紫氣: { fill: '#a7f3d0', stroke: '#059669', halo: 'rgba(167, 243, 208, 0.4)' },
-  };
-
-  // 極座標計算函式 (經度deg 轉 SVG x, y)
-  const getCoords = (deg: number, radius: number) => {
-    // 0deg 位於正右方，逆時針排列
-    const rad = ((deg - 90) * Math.PI) / 180;
-    return {
-      x: center + radius * Math.cos(rad),
-      y: center + radius * Math.sin(rad),
-    };
-  };
-
-  // 計算星曜半徑（碰撞退讓演算法）
-  const processedStars = data.stars.map((star, idx, arr) => {
-    let currentR = starBaseR;
-    // 檢查是否有同角度相近的星曜，若有則內縮 radius
-    for (let i = 0; i < idx; i++) {
-      const diff = Math.abs(star.longitude - arr[i].longitude);
-      if (diff < 8 || diff > 352) {
-        currentR -= 22;
-      }
-    }
-    const coords = getCoords(star.longitude, currentR);
-    return { ...star, x: coords.x, y: coords.y, r: currentR };
-  });
-
-  const mingBranch = data.mingGong.slice(0, 1);
-
-  return (
-    <div className="relative flex flex-col items-center justify-center rounded-2xl border border-amber-500/30 bg-slate-950 p-4 shadow-2xl overflow-hidden">
-      {/* 背景古金星空暈線 */}
-      <div className="pointer-events-none absolute size-[480px] rounded-full bg-amber-500/5 blur-[90px]" />
-
-      <div className="relative w-full max-w-[500px] aspect-square flex items-center justify-center">
-        <svg viewBox={`0 0 ${size} ${size}`} className="w-full h-full select-none">
-          <defs>
-            {/* 炫彩外環漸層 */}
-            <linearGradient id="ringGold" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#fef3c7" />
-              <stop offset="50%" stopColor="#f59e0b" />
-              <stop offset="100%" stopColor="#78350f" />
-            </linearGradient>
-            
-            {/* 核心光芒 Filter */}
-            <filter id="starGlow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="3" result="coloredBlur" />
-              <feMerge>
-                <feMergeNode in="coloredBlur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-
-          {/* 1. 外圍與內圍裝飾同心圓 */}
-          <circle cx={center} cy={center} r={outerR + 12} stroke="url(#ringGold)" strokeWidth="1" strokeDasharray="3, 5" opacity="0.4" fill="none" />
-          <circle cx={center} cy={center} r={outerR} stroke="url(#ringGold)" strokeWidth="2" fill="none" opacity="0.8" />
-          <circle cx={center} cy={center} r={zodiacR} stroke="url(#ringGold)" strokeWidth="1" strokeDasharray="2, 4" fill="none" opacity="0.5" />
-          <circle cx={center} cy={center} r={innerR} stroke="url(#ringGold)" strokeWidth="1.5" fill="#020617" opacity="0.9" />
-
-          {/* 2. 十二黃道宮位分割線與標籤 */}
-          {ZODIAC_SECTORS.map((sector, i) => {
-            const startDeg = i * 30;
-            const midDeg = startDeg + 15;
-            const linePos = getCoords(startDeg, outerR);
-            const labelPos = getCoords(midDeg, (outerR + zodiacR) / 2);
-            const isMingGongSector = sector.branch === mingBranch;
-
-            // 命宮高亮扇形 (如果該宮位為立命宮)
-            const p1 = getCoords(startDeg, innerR);
-            const p2 = getCoords(startDeg, outerR);
-            const p3 = getCoords(startDeg + 30, outerR);
-            const p4 = getCoords(startDeg + 30, innerR);
-            const pathD = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y} A ${outerR} ${outerR} 0 0 1 ${p3.x} ${p3.y} L ${p4.x} ${p4.y} A ${innerR} ${innerR} 0 0 0 ${p1.x} ${p1.y} Z`;
-
-            return (
-              <g key={i}>
-                {/* 命宮高亮金色區域 */}
-                {isMingGongSector && (
-                  <path d={pathD} fill="#f59e0b" opacity="0.15" />
-                )}
-
-                {/* 輻射分割線 */}
-                <line x1={center} y1={center} x2={linePos.x} y2={linePos.y} stroke="#78350f" strokeWidth="1" opacity="0.3" />
-
-                {/* 十二宮文字 */}
-                <text
-                  x={labelPos.x}
-                  y={labelPos.y}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fill={isMingGongSector ? '#fef3c7' : '#94a3b8'}
-                  fontSize={isMingGongSector ? '11' : '10'}
-                  fontWeight={isMingGongSector ? 'bold' : 'normal'}
-                  fontFamily="serif"
-                >
-                  {sector.branch}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* 3. 繪製七政四餘星曜點位與線條 */}
-          {processedStars.map((star) => {
-            const style = STAR_COLORS[star.name] || { fill: '#e2e8f0', stroke: '#94a3b8', halo: 'rgba(226, 232, 240, 0.3)' };
-            const lineToCenter = getCoords(star.longitude, innerR);
-
-            return (
-              <g key={star.name} className="group cursor-pointer">
-                {/* 星曜至圓心虛線 */}
-                <line
-                  x1={lineToCenter.x}
-                  y1={lineToCenter.y}
-                  x2={star.x}
-                  y2={star.y}
-                  stroke={style.stroke}
-                  strokeWidth="1"
-                  strokeDasharray="2, 3"
-                  opacity="0.4"
-                />
-
-                {/* 星曜外圍擴散光暈 */}
-                <circle cx={star.x} cy={star.y} r="10" fill={style.halo} filter="url(#starGlow)" />
-
-                {/* 星曜實體圓點 */}
-                <circle
-                  cx={star.x}
-                  cy={star.y}
-                  r="4"
-                  fill={style.fill}
-                  stroke={style.stroke}
-                  strokeWidth="1.5"
-                  className="transition-transform duration-300 group-hover:scale-150"
-                />
-
-                {/* 星曜名稱標籤 */}
-                <text
-                  x={star.x}
-                  y={star.y - 10}
-                  textAnchor="middle"
-                  fill="#f8fafc"
-                  fontSize="10"
-                  fontWeight="bold"
-                  fontFamily="serif"
-                  className="drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]"
-                >
-                  {star.name}
-                  {star.isRetrograde ? '⟲' : ''}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* 4. 圓心標示與命宮資訊 */}
-          <g transform={`translate(${center}, ${center})`}>
-            <circle cx="0" cy="0" r="32" fill="#020617" stroke="url(#ringGold)" strokeWidth="1" />
-            <text x="0" y="-6" textAnchor="middle" fill="#f59e0b" fontSize="10" fontWeight="bold" fontFamily="serif">
-              {data.mingGong.split(' ')[0]}
-            </text>
-            <text x="0" y="10" textAnchor="middle" fill="#38bdf8" fontSize="9" fontFamily="serif">
-              {data.shenGong.split(' ')[0]}
-            </text>
-          </g>
-        </svg>
-      </div>
-
-      {/* 底部分類圖例 */}
-      <div className="mt-2 flex flex-wrap items-center justify-center gap-3 text-[11px] text-slate-400">
-        <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-amber-400" /> 太陽/土星</span>
-        <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-sky-300" /> 太陰/月孛</span>
-        <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-400" /> 木星/紫氣</span>
-        <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-red-400" /> 火星</span>
-        <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-purple-400" /> 羅睺/計都</span>
-      </div>
-    </div>
-  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -522,13 +285,12 @@ function BaziForm({
 }) {
   const [name, setName] = useState('');
   const [gender, setGender] = useState<'male' | 'female'>('male');
-  const [calendar, setCalendar] = useState<'solar' | 'lunar'>('solar');
   const [trueSolar, setTrueSolar] = useState('on');
   const [longitude, setLongitude] = useState('114.17');
-  const [year, setYear] = useState('1995');
-  const [month, setMonth] = useState('8');
-  const [day, setDay] = useState('15');
-  const [hour, setHour] = useState('14');
+  const [year, setYear] = useState('1983');
+  const [month, setMonth] = useState('11');
+  const [day, setDay] = useState('23');
+  const [hour, setHour] = useState('5');
   const [minute, setMinute] = useState('0');
   const [occupation, setOccupation] = useState('');
   const [maritalStatus, setMaritalStatus] = useState('單身未婚');
@@ -536,7 +298,7 @@ function BaziForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit({
-      name, year, month, day, hour, minute, gender, calendar, trueSolar, longitude, occupation: occupation.trim(), maritalStatus,
+      name, year, month, day, hour, minute, gender, trueSolar, longitude, occupation: occupation.trim(), maritalStatus,
     });
   };
 
@@ -710,7 +472,7 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
 }
 
 /* ------------------------------------------------------------------ */
-/* 七政四餘視覺化容器 (支援 SVG 渾天星盤與 12宮位切換)                */
+/* 七政四餘視覺化容器 (呼叫 components/QizhengChartSVG)                 */
 /* ------------------------------------------------------------------ */
 
 function QizhengSection({ data }: { data: QizhengChart }) {
@@ -726,7 +488,6 @@ function QizhengSection({ data }: { data: QizhengChart }) {
           <h3 className="font-serif text-base font-medium text-slate-100">七政四餘天象星盤 (星平合參)</h3>
         </div>
 
-        {/* 視角切換按鈕 */}
         <div className="flex items-center gap-1 rounded-lg bg-slate-950 p-1 border border-slate-800">
           <button
             type="button"
@@ -757,7 +518,7 @@ function QizhengSection({ data }: { data: QizhengChart }) {
             <div key={idx} className="border border-slate-800 bg-slate-950/60 p-2.5 rounded-xl flex flex-col justify-between min-h-[85px]">
               <div className="flex justify-between items-center font-bold">
                 <span className={house.name === '命宮' ? 'text-amber-300 font-extrabold' : 'text-slate-200'}>{house.name}</span>
-                <span className="text-slate-500 text-[10px]">{house.zodiac}</span>
+                <span className="text-slate-500 text-[10px]">{house.branch}</span>
               </div>
               <div className="mt-2 flex flex-wrap gap-1">
                 {house.stars.length > 0 ? (
@@ -788,14 +549,17 @@ function PillarDetails({ distribution, luck }: { distribution: any[]; luck: Luck
         <div className="flex flex-col gap-2.5">
           {distribution.map((d) => {
             const s = ELEMENT_STYLE[d.element as Element];
+            const maxVal = Math.max(...distribution.map(x => x.value), 1);
+            const widthPct = Math.round((d.value / maxVal) * 100);
             return (
               <div key={d.element} className="flex items-center gap-2.5">
                 <span className={`inline-flex size-6 items-center justify-center rounded border ${s.border} ${s.bg} text-xs ${s.text}`}>
                   {ELEMENT_LABEL[d.element as Element]}
                 </span>
                 <div className="h-2 flex-1 rounded-full bg-slate-950 overflow-hidden">
-                  <div className={`h-full ${s.bar}`} style={{ width: `${d.value * 20}%` }} />
+                  <div className={`h-full ${s.bar}`} style={{ width: `${widthPct}%` }} />
                 </div>
+                <span className="text-xs text-slate-400 w-8 text-right">{d.value}</span>
               </div>
             );
           })}
