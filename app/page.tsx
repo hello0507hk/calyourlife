@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { calculateBazi } from '@/lib/bazi';
-import { calculateQizheng, QizhengChart } from '@/lib/qizheng';
+import { calculateQizheng, QizhengChart, StarPosition } from '@/lib/qizheng';
+import QizhengChartSVG from '@/components/QizhengChartSVG';
 import {
   ChevronDown,
   Compass,
@@ -28,10 +29,11 @@ import {
   Briefcase,
   Heart,
   Star,
-  Globe,
+  Eye,
+  Grid,
 } from 'lucide-react';
 
-// 命盤型別定義（擴充七政四餘欄位）
+// 命盤型別定義
 export interface BaziResult {
   solarDate: string;
   lunarDate: string;
@@ -56,18 +58,10 @@ export interface BaziResult {
   qizhengData?: QizhengChart;
 }
 
-/* ------------------------------------------------------------------ */
-/* 五行深色主題樣式設定                                                 */
-/* ------------------------------------------------------------------ */
-
 type Element = 'wood' | 'fire' | 'earth' | 'metal' | 'water';
 
 const ELEMENT_LABEL: Record<Element, string> = {
-  wood: '木',
-  fire: '火',
-  earth: '土',
-  metal: '金',
-  water: '水',
+  wood: '木', fire: '火', earth: '土', metal: '金', water: '水',
 };
 
 const ELEMENT_STYLE: Record<
@@ -82,19 +76,13 @@ const ELEMENT_STYLE: Record<
 };
 
 const GAN_ELEMENT: Record<string, Element> = {
-  甲: 'wood', 乙: 'wood',
-  丙: 'fire', 丁: 'fire',
-  戊: 'earth', 己: 'earth',
-  庚: 'metal', 辛: 'metal',
-  壬: 'water', 癸: 'water',
+  甲: 'wood', 乙: 'wood', 丙: 'fire', 丁: 'fire', 戊: 'earth', 己: 'earth',
+  庚: 'metal', 辛: 'metal', 壬: 'water', 癸: 'water',
 };
 
 const ZHI_ELEMENT: Record<string, Element> = {
-  寅: 'wood', 卯: 'wood',
-  巳: 'fire', 午: 'fire',
-  辰: 'earth', 戌: 'earth', 丑: 'earth', 未: 'earth',
-  申: 'metal', 酉: 'metal',
-  亥: 'water', 子: 'water',
+  寅: 'wood', 卯: 'wood', 巳: 'fire', 午: 'fire', 辰: 'earth', 戌: 'earth',
+  丑: 'earth', 未: 'earth', 申: 'metal', 酉: 'metal', 亥: 'water', 子: 'water',
 };
 
 type PillarKey = 'year' | 'month' | 'day' | 'hour';
@@ -121,14 +109,11 @@ interface LuckPeriod {
   current?: boolean;
 }
 
-// 輔助函式：根據公曆年份計算干支
 function getYearGanZhi(year: number): string {
   const stems = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
   const branches = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
   const offset = year - 4;
-  const stem = stems[(offset % 10 + 10) % 10];
-  const branch = branches[(offset % 12 + 12) % 12];
-  return `${year} ${stem}${branch}年`;
+  return `${year} ${stems[(offset % 10 + 10) % 10]}${branches[(offset % 12 + 12) % 12]}年`;
 }
 
 function mapBaziToPillars(bazi: BaziResult): Pillar[] {
@@ -188,6 +173,224 @@ function mapBaziToLuck(dayyun: BaziResult['dayyun']): LuckPeriod[] {
 }
 
 /* ------------------------------------------------------------------ */
+/* 視覺震撼：七政四餘圓形天象儀 SVG 組件 (QizhengChartSVG)             */
+/* ------------------------------------------------------------------ */
+
+function QizhengChartSVG({ data }: { data: QizhengChart }) {
+  const size = 520;
+  const center = size / 2;
+  const outerR = 230;
+  const zodiacR = 185;
+  const starBaseR = 135;
+  const innerR = 75;
+
+  // 十二黃道宮分區與名稱
+  const ZODIAC_SECTORS = [
+    { label: '戌 (白羊)', branch: '戌' },
+    { label: '酉 (金牛)', branch: '酉' },
+    { label: '申 (雙子)', branch: '申' },
+    { label: '未 (巨蟹)', branch: '未' },
+    { label: '午 (獅子)', branch: '午' },
+    { label: '巳 (處女)', branch: '巳' },
+    { label: '辰 (天秤)', branch: '辰' },
+    { label: '卯 (天蠍)', branch: '卯' },
+    { label: '寅 (射手)', branch: '寅' },
+    { label: '丑 (摩羯)', branch: '丑' },
+    { label: '子 (水瓶)', branch: '子' },
+    { label: '亥 (雙魚)', branch: '亥' },
+  ];
+
+  // 星曜顏色映射表
+  const STAR_COLORS: Record<string, { fill: string; stroke: string; halo: string }> = {
+    太陽: { fill: '#fbbf24', stroke: '#f59e0b', halo: 'rgba(251, 191, 36, 0.4)' },
+    太陰: { fill: '#e0f2fe', stroke: '#38bdf8', halo: 'rgba(56, 189, 248, 0.4)' },
+    木星: { fill: '#34d399', stroke: '#10b981', halo: 'rgba(52, 211, 153, 0.4)' },
+    火星: { fill: '#f87171', stroke: '#ef4444', halo: 'rgba(248, 113, 113, 0.4)' },
+    土星: { fill: '#fbbf24', stroke: '#d97706', halo: 'rgba(217, 119, 6, 0.4)' },
+    金星: { fill: '#f1f5f9', stroke: '#cbd5e1', halo: 'rgba(241, 245, 249, 0.4)' },
+    水星: { fill: '#60a5fa', stroke: '#3b82f6', halo: 'rgba(96, 165, 250, 0.4)' },
+    羅睺: { fill: '#c084fc', stroke: '#a855f7', halo: 'rgba(192, 132, 252, 0.4)' },
+    計都: { fill: '#f472b6', stroke: '#ec4899', halo: 'rgba(244, 114, 182, 0.4)' },
+    月孛: { fill: '#38bdf8', stroke: '#0284c7', halo: 'rgba(56, 189, 248, 0.4)' },
+    紫氣: { fill: '#a7f3d0', stroke: '#059669', halo: 'rgba(167, 243, 208, 0.4)' },
+  };
+
+  // 極座標計算函式 (經度deg 轉 SVG x, y)
+  const getCoords = (deg: number, radius: number) => {
+    // 0deg 位於正右方，逆時針排列
+    const rad = ((deg - 90) * Math.PI) / 180;
+    return {
+      x: center + radius * Math.cos(rad),
+      y: center + radius * Math.sin(rad),
+    };
+  };
+
+  // 計算星曜半徑（碰撞退讓演算法）
+  const processedStars = data.stars.map((star, idx, arr) => {
+    let currentR = starBaseR;
+    // 檢查是否有同角度相近的星曜，若有則內縮 radius
+    for (let i = 0; i < idx; i++) {
+      const diff = Math.abs(star.longitude - arr[i].longitude);
+      if (diff < 8 || diff > 352) {
+        currentR -= 22;
+      }
+    }
+    const coords = getCoords(star.longitude, currentR);
+    return { ...star, x: coords.x, y: coords.y, r: currentR };
+  });
+
+  const mingBranch = data.mingGong.slice(0, 1);
+
+  return (
+    <div className="relative flex flex-col items-center justify-center rounded-2xl border border-amber-500/30 bg-slate-950 p-4 shadow-2xl overflow-hidden">
+      {/* 背景古金星空暈線 */}
+      <div className="pointer-events-none absolute size-[480px] rounded-full bg-amber-500/5 blur-[90px]" />
+
+      <div className="relative w-full max-w-[500px] aspect-square flex items-center justify-center">
+        <svg viewBox={`0 0 ${size} ${size}`} className="w-full h-full select-none">
+          <defs>
+            {/* 炫彩外環漸層 */}
+            <linearGradient id="ringGold" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#fef3c7" />
+              <stop offset="50%" stopColor="#f59e0b" />
+              <stop offset="100%" stopColor="#78350f" />
+            </linearGradient>
+            
+            {/* 核心光芒 Filter */}
+            <filter id="starGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+              <feMerge>
+                <feMergeNode in="coloredBlur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+
+          {/* 1. 外圍與內圍裝飾同心圓 */}
+          <circle cx={center} cy={center} r={outerR + 12} stroke="url(#ringGold)" strokeWidth="1" strokeDasharray="3, 5" opacity="0.4" fill="none" />
+          <circle cx={center} cy={center} r={outerR} stroke="url(#ringGold)" strokeWidth="2" fill="none" opacity="0.8" />
+          <circle cx={center} cy={center} r={zodiacR} stroke="url(#ringGold)" strokeWidth="1" strokeDasharray="2, 4" fill="none" opacity="0.5" />
+          <circle cx={center} cy={center} r={innerR} stroke="url(#ringGold)" strokeWidth="1.5" fill="#020617" opacity="0.9" />
+
+          {/* 2. 十二黃道宮位分割線與標籤 */}
+          {ZODIAC_SECTORS.map((sector, i) => {
+            const startDeg = i * 30;
+            const midDeg = startDeg + 15;
+            const linePos = getCoords(startDeg, outerR);
+            const labelPos = getCoords(midDeg, (outerR + zodiacR) / 2);
+            const isMingGongSector = sector.branch === mingBranch;
+
+            // 命宮高亮扇形 (如果該宮位為立命宮)
+            const p1 = getCoords(startDeg, innerR);
+            const p2 = getCoords(startDeg, outerR);
+            const p3 = getCoords(startDeg + 30, outerR);
+            const p4 = getCoords(startDeg + 30, innerR);
+            const pathD = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y} A ${outerR} ${outerR} 0 0 1 ${p3.x} ${p3.y} L ${p4.x} ${p4.y} A ${innerR} ${innerR} 0 0 0 ${p1.x} ${p1.y} Z`;
+
+            return (
+              <g key={i}>
+                {/* 命宮高亮金色區域 */}
+                {isMingGongSector && (
+                  <path d={pathD} fill="#f59e0b" opacity="0.15" />
+                )}
+
+                {/* 輻射分割線 */}
+                <line x1={center} y1={center} x2={linePos.x} y2={linePos.y} stroke="#78350f" strokeWidth="1" opacity="0.3" />
+
+                {/* 十二宮文字 */}
+                <text
+                  x={labelPos.x}
+                  y={labelPos.y}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fill={isMingGongSector ? '#fef3c7' : '#94a3b8'}
+                  fontSize={isMingGongSector ? '11' : '10'}
+                  fontWeight={isMingGongSector ? 'bold' : 'normal'}
+                  fontFamily="serif"
+                >
+                  {sector.branch}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* 3. 繪製七政四餘星曜點位與線條 */}
+          {processedStars.map((star) => {
+            const style = STAR_COLORS[star.name] || { fill: '#e2e8f0', stroke: '#94a3b8', halo: 'rgba(226, 232, 240, 0.3)' };
+            const lineToCenter = getCoords(star.longitude, innerR);
+
+            return (
+              <g key={star.name} className="group cursor-pointer">
+                {/* 星曜至圓心虛線 */}
+                <line
+                  x1={lineToCenter.x}
+                  y1={lineToCenter.y}
+                  x2={star.x}
+                  y2={star.y}
+                  stroke={style.stroke}
+                  strokeWidth="1"
+                  strokeDasharray="2, 3"
+                  opacity="0.4"
+                />
+
+                {/* 星曜外圍擴散光暈 */}
+                <circle cx={star.x} cy={star.y} r="10" fill={style.halo} filter="url(#starGlow)" />
+
+                {/* 星曜實體圓點 */}
+                <circle
+                  cx={star.x}
+                  cy={star.y}
+                  r="4"
+                  fill={style.fill}
+                  stroke={style.stroke}
+                  strokeWidth="1.5"
+                  className="transition-transform duration-300 group-hover:scale-150"
+                />
+
+                {/* 星曜名稱標籤 */}
+                <text
+                  x={star.x}
+                  y={star.y - 10}
+                  textAnchor="middle"
+                  fill="#f8fafc"
+                  fontSize="10"
+                  fontWeight="bold"
+                  fontFamily="serif"
+                  className="drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]"
+                >
+                  {star.name}
+                  {star.isRetrograde ? '⟲' : ''}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* 4. 圓心標示與命宮資訊 */}
+          <g transform={`translate(${center}, ${center})`}>
+            <circle cx="0" cy="0" r="32" fill="#020617" stroke="url(#ringGold)" strokeWidth="1" />
+            <text x="0" y="-6" textAnchor="middle" fill="#f59e0b" fontSize="10" fontWeight="bold" fontFamily="serif">
+              {data.mingGong.split(' ')[0]}
+            </text>
+            <text x="0" y="10" textAnchor="middle" fill="#38bdf8" fontSize="9" fontFamily="serif">
+              {data.shenGong.split(' ')[0]}
+            </text>
+          </g>
+        </svg>
+      </div>
+
+      {/* 底部分類圖例 */}
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-3 text-[11px] text-slate-400">
+        <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-amber-400" /> 太陽/土星</span>
+        <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-sky-300" /> 太陰/月孛</span>
+        <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-400" /> 木星/紫氣</span>
+        <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-red-400" /> 火星</span>
+        <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-purple-400" /> 羅睺/計都</span>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* 首頁 Landing Page 組件                                              */
 /* ------------------------------------------------------------------ */
 
@@ -202,7 +405,6 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
         <div className="relative mb-10 flex items-center justify-center">
           <div className="absolute size-80 animate-[spin_80s_linear_infinite] rounded-full border border-amber-500/15 sm:size-[380px]" />
           <div className="absolute size-72 animate-[spin_50s_linear_infinite_reverse] rounded-full border border-dashed border-amber-400/25 sm:size-80" />
-          <div className="absolute size-60 animate-[ping_4s_cubic-bezier(0,0,0.2,1)_infinite] rounded-full border border-amber-500/10" />
 
           <div className="relative flex size-52 sm:size-64 items-center justify-center rounded-full bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 p-3 shadow-[0_0_50px_rgba(245,158,11,0.25)] border border-amber-500/50 backdrop-blur-xl">
             <svg className="size-full text-amber-400" viewBox="0 0 200 200" fill="none">
@@ -212,41 +414,13 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
                   <stop offset="50%" stopColor="#f59e0b" />
                   <stop offset="100%" stopColor="#b45309" />
                 </linearGradient>
-                <radialGradient id="glowPool" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.25" />
-                  <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
-                </radialGradient>
-                <g id="yang"><rect x="-14" y="-2" width="28" height="3.5" rx="1" fill="url(#goldGrad)" /></g>
-                <g id="yin"><rect x="-14" y="-2" width="12" height="3.5" rx="1" fill="url(#goldGrad)" /><rect x="2" y="-2" width="12" height="3.5" rx="1" fill="url(#goldGrad)" /></g>
               </defs>
-
-              <circle cx="100" cy="100" r="95" fill="url(#glowPool)" />
-              <circle cx="100" cy="100" r="92" stroke="url(#goldGrad)" strokeWidth="1" strokeOpacity="0.4" strokeDasharray="1.5, 4.5" />
+              <circle cx="100" cy="100" r="92" stroke="url(#goldGrad)" strokeWidth="1" strokeDasharray="1.5, 4.5" />
               <circle cx="100" cy="100" r="86" stroke="url(#goldGrad)" strokeWidth="1.5" strokeOpacity="0.7" />
-
-              <text x="100" y="21" textAnchor="middle" fill="url(#goldGrad)" fontSize="8.5" fontFamily="serif" fontWeight="bold">天 · 乾</text>
-              <text x="100" y="186" textAnchor="middle" fill="url(#goldGrad)" fontSize="8.5" fontFamily="serif" fontWeight="bold">地 · 坤</text>
-              <text x="17" y="103" textAnchor="middle" fill="url(#goldGrad)" fontSize="8.5" fontFamily="serif" fontWeight="bold">離</text>
-              <text x="183" y="103" textAnchor="middle" fill="url(#goldGrad)" fontSize="8.5" fontFamily="serif" fontWeight="bold">坎</text>
-
-              <g transform="translate(100, 31)"><use href="#yang" y="-6" /><use href="#yang" y="0" /><use href="#yang" y="6" /></g>
-              <g transform="translate(100, 100) rotate(45) translate(0, -69)"><use href="#yin" y="-6" /><use href="#yang" y="0" /><use href="#yang" y="6" /></g>
-              <g transform="translate(100, 100) rotate(90) translate(0, -69)"><use href="#yang" y="-6" /><use href="#yin" y="0" /><use href="#yang" y="6" /></g>
-              <g transform="translate(100, 100) rotate(135) translate(0, -69)"><use href="#yin" y="-6" /><use href="#yin" y="0" /><use href="#yang" y="6" /></g>
-              <g transform="translate(100, 100) rotate(180) translate(0, -69)"><use href="#yin" y="-6" /><use href="#yin" y="0" /><use href="#yin" y="6" /></g>
-              <g transform="translate(100, 100) rotate(225) translate(0, -69)"><use href="#yang" y="-6" /><use href="#yang" y="0" /><use href="#yin" y="6" /></g>
-              <g transform="translate(100, 100) rotate(270) translate(0, -69)"><use href="#yin" y="-6" /><use href="#yang" y="0" /><use href="#yin" y="6" /></g>
-              <g transform="translate(100, 100) rotate(315) translate(0, -69)"><use href="#yang" y="-6" /><use href="#yin" y="0" /><use href="#yin" y="6" /></g>
-
-              <circle cx="100" cy="100" r="54" stroke="url(#goldGrad)" strokeWidth="1" opacity="0.6" />
-              <circle cx="100" cy="100" r="50" stroke="url(#goldGrad)" strokeWidth="1.5" />
-
-              <g>
-                <circle cx="100" cy="100" r="48" fill="#020617" />
-                <path d="M 100 52 A 48 48 0 0 1 100 148 A 24 24 0 0 1 100 100 A 24 24 0 0 0 100 52 Z" fill="url(#goldGrad)" />
-                <circle cx="100" cy="76" r="5.5" fill="#020617" />
-                <circle cx="100" cy="124" r="5.5" fill="url(#goldGrad)" />
-              </g>
+              <circle cx="100" cy="100" r="48" fill="#020617" />
+              <path d="M 100 52 A 48 48 0 0 1 100 148 A 24 24 0 0 1 100 100 A 24 24 0 0 0 100 52 Z" fill="url(#goldGrad)" />
+              <circle cx="100" cy="76" r="5.5" fill="#020617" />
+              <circle cx="100" cy="124" r="5.5" fill="url(#goldGrad)" />
             </svg>
           </div>
         </div>
@@ -266,29 +440,15 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
           「天地玄黃，星平合參；四柱藏通變，七政定吉凶。」
         </p>
 
-        <p className="mt-4 max-w-xl font-serif text-xs leading-relaxed text-slate-400 sm:text-sm">
-          結合「子平八字」定格局大運與五行喜忌，配搭「七政四餘」天象十一曜鎖定事件應驗點。
-          深得《滴天髓》、《造化元鑰》、《子平一得》與《鄭氏星案》之真傳，
-          知命順勢，趨吉避凶。
-        </p>
-
         <div className="mt-10">
           <button
             type="button"
             onClick={onEnter}
-            className="group relative inline-flex items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-9 py-4 font-serif text-lg font-semibold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.3)] transition-all duration-300 hover:scale-105 hover:shadow-[0_0_45px_rgba(245,158,11,0.5)] active:scale-95"
+            className="group relative inline-flex items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-9 py-4 font-serif text-lg font-semibold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.3)] transition-all duration-300 hover:scale-105 active:scale-95"
           >
             <span>進入星平命盤排盤</span>
             <ArrowRight className="size-5 transition-transform duration-300 group-hover:translate-x-1" />
           </button>
-        </div>
-
-        <div className="mt-16 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-500">
-          <span className="flex items-center gap-1.5"><Compass className="size-3.5 text-amber-500/70" /> 子平正宗 + 七政四餘</span>
-          <span>•</span>
-          <span className="flex items-center gap-1.5"><Clock className="size-3.5 text-amber-500/70" /> 經度與天文真太陽時校正</span>
-          <span>•</span>
-          <span className="flex items-center gap-1.5"><WandSparkles className="size-3.5 text-amber-500/70" /> Gemini / DeepSeek / Qwen / Grok 四 AI 會診</span>
         </div>
       </div>
     </div>
@@ -314,7 +474,7 @@ function SelectField({ label, value, onChange, options }: SelectFieldProps) {
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full appearance-none rounded-lg border border-slate-800 bg-slate-950 px-3 py-2.5 pr-8 text-sm text-slate-100 outline-none transition-colors focus:border-amber-500/80 focus:ring-1 focus:ring-amber-500/40"
+          className="w-full appearance-none rounded-lg border border-slate-800 bg-slate-950 px-3 py-2.5 pr-8 text-sm text-slate-100 outline-none focus:border-amber-500/80"
         >
           {options.map((o) => (
             <option key={o.value} value={o.value} className="bg-slate-900 text-slate-200">
@@ -357,20 +517,7 @@ function BaziForm({
   onSubmit,
   loading,
 }: {
-  onSubmit: (formData: {
-    name: string;
-    year: string;
-    month: string;
-    day: string;
-    hour: string;
-    minute: string;
-    gender: 'male' | 'female';
-    calendar: 'solar' | 'lunar';
-    trueSolar: string;
-    longitude: string;
-    occupation: string;
-    maritalStatus: string;
-  }) => void;
+  onSubmit: (formData: any) => void;
   loading: boolean;
 }) {
   const [name, setName] = useState('');
@@ -383,26 +530,13 @@ function BaziForm({
   const [day, setDay] = useState('15');
   const [hour, setHour] = useState('14');
   const [minute, setMinute] = useState('0');
-
-  // 職業與婚姻狀態欄位
   const [occupation, setOccupation] = useState('');
   const [maritalStatus, setMaritalStatus] = useState('單身未婚');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit({
-      name,
-      year,
-      month,
-      day,
-      hour,
-      minute,
-      gender,
-      calendar,
-      trueSolar,
-      longitude,
-      occupation: occupation.trim(),
-      maritalStatus,
+      name, year, month, day, hour, minute, gender, calendar, trueSolar, longitude, occupation: occupation.trim(), maritalStatus,
     });
   };
 
@@ -419,163 +553,88 @@ function BaziForm({
       </div>
 
       <div className="flex flex-col gap-4">
-        {/* 姓名 */}
         <label className="flex flex-col gap-1.5 w-full">
           <span className="text-xs font-medium text-slate-400">姓名</span>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="請輸入姓名"
-            className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-amber-500/80 focus:ring-1 focus:ring-amber-500/40"
+            className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-amber-500/80"
           />
         </label>
 
-        {/* 性別切換 */}
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-slate-400">性別</span>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => setGender('male')}
-              style={{
-                backgroundColor: gender === 'male' ? '#f59e0b' : '#020617',
-                color: gender === 'male' ? '#000000' : '#94a3b8',
-                borderColor: gender === 'male' ? '#fcd34d' : '#1e293b',
-                fontWeight: gender === 'male' ? '700' : '400',
-              }}
-              className="flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-all"
+              className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-all ${
+                gender === 'male' ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold' : 'bg-slate-950 text-slate-400 border-slate-800'
+              }`}
             >
-              <Mars className="size-4" />
-              <span>乾造 · 男</span>
-              {gender === 'male' && <span className="text-black font-extrabold ml-0.5">✓</span>}
+              <Mars className="size-4" /> 乾造 · 男
             </button>
 
             <button
               type="button"
               onClick={() => setGender('female')}
-              style={{
-                backgroundColor: gender === 'female' ? '#f59e0b' : '#020617',
-                color: gender === 'female' ? '#000000' : '#94a3b8',
-                borderColor: gender === 'female' ? '#fcd34d' : '#1e293b',
-                fontWeight: gender === 'female' ? '700' : '400',
-              }}
-              className="flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-all"
+              className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-all ${
+                gender === 'female' ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold' : 'bg-slate-950 text-slate-400 border-slate-800'
+              }`}
             >
-              <Venus className="size-4" />
-              <span>坤造 · 女</span>
-              {gender === 'female' && <span className="text-black font-extrabold ml-0.5">✓</span>}
+              <Venus className="size-4" /> 坤造 · 女
             </button>
           </div>
         </div>
 
-        {/* 曆法切換 */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-slate-400">曆法</span>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setCalendar('solar')}
-              className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors ${
-                calendar === 'solar'
-                  ? 'border-amber-500/80 bg-amber-500/10 text-amber-300 font-medium'
-                  : 'border-slate-800 bg-slate-950 text-slate-400'
-              }`}
-            >
-              <CalendarIcon className="size-3.5" />
-              公曆 (陽曆)
-            </button>
-            <button
-              type="button"
-              onClick={() => setCalendar('lunar')}
-              className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors ${
-                calendar === 'lunar'
-                  ? 'border-amber-500/80 bg-amber-500/10 text-amber-300 font-medium'
-                  : 'border-slate-800 bg-slate-950 text-slate-400'
-              }`}
-            >
-              <Moon className="size-3.5" />
-              農曆 (陰曆)
-            </button>
-          </div>
-        </div>
-
-        {/* 出生日期：年/月/日 */}
         <div className="grid grid-cols-3 gap-2">
           <SelectField label="出生年" value={year} onChange={setYear} options={range(1940, 2026, '年')} />
           <SelectField label="出生月" value={month} onChange={setMonth} options={range(1, 12, '月')} />
           <SelectField label="出生日" value={day} onChange={setDay} options={range(1, 31, '日')} />
         </div>
 
-        {/* 出生真實時間：小時與分鐘 */}
         <div className="grid grid-cols-2 gap-2">
           <SelectField
-            label="出生小時 (真實鐘表時)"
+            label="出生小時"
             value={hour}
             onChange={setHour}
-            options={Array.from({ length: 24 }, (_, i) => ({
-              value: String(i),
-              label: `${String(i).padStart(2, '0')} 時`,
-            }))}
+            options={Array.from({ length: 24 }, (_, i) => ({ value: String(i), label: `${String(i).padStart(2, '0')} 時` }))}
           />
           <SelectField
             label="出生分鐘"
             value={minute}
             onChange={setMinute}
-            options={Array.from({ length: 60 }, (_, i) => ({
-              value: String(i),
-              label: `${String(i).padStart(2, '0')} 分`,
-            }))}
+            options={Array.from({ length: 60 }, (_, i) => ({ value: String(i), label: `${String(i).padStart(2, '0')} 分` }))}
           />
         </div>
 
-        {/* 現時職業與婚姻狀態欄位 */}
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <label className="flex flex-col gap-1.5 w-full">
             <span className="text-xs font-medium text-slate-400">現時職業（選填）</span>
             <input
               value={occupation}
               onChange={(e) => setOccupation(e.target.value)}
-              placeholder="例如：IT、金融、創業、學生..."
-              className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-amber-500/80 focus:ring-1 focus:ring-amber-500/40"
+              placeholder="例如：IT、金融、創業..."
+              className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-amber-500/80"
             />
           </label>
 
-          <SelectField
-            label="現時婚姻/感情狀態"
-            value={maritalStatus}
-            onChange={setMaritalStatus}
-            options={MARITAL_OPTIONS}
-          />
+          <SelectField label="感情/婚姻狀態" value={maritalStatus} onChange={setMaritalStatus} options={MARITAL_OPTIONS} />
         </div>
 
-        {/* 真太陽時校正與經度選單 */}
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <SelectField
-            label="真太陽時校正"
-            value={trueSolar}
-            onChange={setTrueSolar}
-            options={[
-              { value: 'on', label: '開啟真太陽時' },
-              { value: 'off', label: '關閉 (平太陽時)' },
-            ]}
-          />
-          {trueSolar === 'on' && (
-            <SelectField
-              label="出生地區 (經度時差)"
-              value={longitude}
-              onChange={setLongitude}
-              options={LOCATION_OPTIONS}
-            />
-          )}
+          <SelectField label="真太陽時校正" value={trueSolar} onChange={setTrueSolar} options={[{ value: 'on', label: '開啟真太陽時' }, { value: 'off', label: '關閉' }]} />
+          {trueSolar === 'on' && <SelectField label="出生經度" value={longitude} onChange={setLongitude} options={LOCATION_OPTIONS} />}
         </div>
 
         <button
           type="submit"
           disabled={loading}
-          className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-3 text-sm font-medium text-slate-950 shadow-lg shadow-amber-500/10 transition-all hover:bg-amber-400 active:bg-amber-600 disabled:opacity-70"
+          className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-3 text-sm font-medium text-slate-950 shadow-lg transition-all hover:bg-amber-400 disabled:opacity-70"
         >
           <Sparkles className="size-4" />
-          {loading ? '排盤中…' : '星平合參排盤與 AI 會診'}
+          {loading ? '星平合參排盤中…' : '星平合參排盤與 AI 會診'}
         </button>
       </div>
     </form>
@@ -587,16 +646,10 @@ function GlyphBlock({ char, element, caption }: { char: string; element: Element
   return (
     <div className={`flex flex-col items-center justify-center gap-0.5 rounded-xl border ${s.border} ${s.bg} px-1 py-1.5 sm:px-2 sm:py-2.5 shrink-0`}>
       <span className={`font-serif text-xl sm:text-3xl font-bold leading-none ${s.text}`}>{char}</span>
-      <span className={`text-[9px] sm:text-[10px] font-medium ${s.text}`}>
-        {caption}{ELEMENT_LABEL[element]}
-      </span>
+      <span className={`text-[9px] sm:text-[10px] font-medium ${s.text}`}>{caption}{ELEMENT_LABEL[element]}</span>
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/* 四柱八字 ＋ 藏干十神（手機版適應性優化）                            */
-/* ------------------------------------------------------------------ */
 
 function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarText?: string }) {
   return (
@@ -618,73 +671,33 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
           {pillars.map((p) => {
             const isDay = p.key === 'day';
             const slots = [...p.hiddenStems];
-            while (slots.length < 3) {
-              slots.push({ char: '', element: 'earth', god: '' });
-            }
+            while (slots.length < 3) slots.push({ char: '', element: 'earth', god: '' });
 
             return (
               <article
                 key={p.key}
-                className={`flex flex-1 flex-col items-stretch rounded-2xl border bg-slate-900/90 p-2 sm:p-3.5 shadow-xl transition-all ${
+                className={`flex flex-1 flex-col items-stretch rounded-2xl border bg-slate-900/90 p-2 sm:p-3.5 shadow-xl ${
                   isDay ? 'border-amber-500/80 ring-1 ring-amber-500/30' : 'border-slate-800'
                 }`}
               >
                 <header className="mb-2 flex h-6 sm:h-7 items-center justify-between border-b border-slate-800/80 pb-1.5 shrink-0">
-                  <div className="flex items-center gap-1">
-                    <h3 className="font-serif text-sm sm:text-base font-bold text-slate-100">{p.label}</h3>
-                    {isDay && (
-                      <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-1 py-0.5 text-[8px] sm:text-[9px] font-semibold text-amber-300">
-                        日主
-                      </span>
-                    )}
-                  </div>
+                  <h3 className="font-serif text-sm sm:text-base font-bold text-slate-100">{p.label}</h3>
                   <span className="text-[9px] sm:text-[10px] text-slate-400">{p.sublabel}</span>
                 </header>
 
                 <div className="flex flex-col gap-1.5 sm:gap-2 shrink-0">
                   <div className="relative shrink-0">
                     <GlyphBlock char={p.heavenlyStem} element={p.heavenlyElement} caption="天干 · " />
-                    <span className="absolute top-1 right-1 sm:top-1.5 sm:right-1.5 rounded bg-slate-950/80 px-1 py-0.5 text-[9px] sm:text-[10px] font-semibold text-amber-400 border border-amber-500/30 shadow-sm">
+                    <span className="absolute top-1 right-1 rounded bg-slate-950/80 px-1 py-0.5 text-[9px] text-amber-400 border border-amber-500/30">
                       {p.heavenlyTenGod}
                     </span>
                   </div>
 
                   <div className="relative shrink-0">
                     <GlyphBlock char={p.earthlyBranch} element={p.earthlyElement} caption="地支 · " />
-                    <span className="absolute top-1 right-1 sm:top-1.5 sm:right-1.5 rounded bg-slate-950/80 px-1 py-0.5 text-[9px] sm:text-[10px] font-semibold text-slate-300 border border-slate-700/50 shadow-sm">
+                    <span className="absolute top-1 right-1 rounded bg-slate-950/80 px-1 py-0.5 text-[9px] text-slate-300 border border-slate-700/50">
                       {p.earthlyTenGod}
                     </span>
-                  </div>
-                </div>
-
-                <div className="mt-2.5 sm:mt-3 border-t border-slate-800/80 pt-1.5 sm:pt-2 shrink-0">
-                  <div className="mb-1 text-[9px] sm:text-[10px] font-medium text-slate-400 text-center">
-                    藏干 · 十神
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    {slots.map((h, i) => {
-                      if (!h.char) {
-                        return (
-                          <div
-                            key={i}
-                            className="flex h-6 sm:h-7 shrink-0 items-center justify-between rounded-lg border border-transparent bg-transparent px-1.5 py-1"
-                          />
-                        );
-                      }
-                      const s = ELEMENT_STYLE[h.element];
-                      return (
-                        <div
-                          key={i}
-                          className={`flex h-6 sm:h-7 shrink-0 items-center justify-between rounded-lg border ${s.border} ${s.bg} px-1.5 sm:px-2 py-1 transition-colors`}
-                        >
-                          <div className="flex items-center gap-0.5 sm:gap-1">
-                            <span className={`font-serif text-xs font-bold ${s.text}`}>{h.char}</span>
-                            <span className={`text-[8px] sm:text-[9px] opacity-75 ${s.text}`}>({ELEMENT_LABEL[h.element]})</span>
-                          </div>
-                          <span className="text-[9px] sm:text-[10px] font-medium text-slate-300">{h.god}</span>
-                        </div>
-                      );
-                    })}
                   </div>
                 </div>
               </article>
@@ -697,60 +710,59 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
 }
 
 /* ------------------------------------------------------------------ */
-/* 七政四餘 12 宮位星盤視覺化組件                                       */
+/* 七政四餘視覺化容器 (支援 SVG 渾天星盤與 12宮位切換)                */
 /* ------------------------------------------------------------------ */
 
-function QizhengGrid({ data }: { data: QizhengChart }) {
+function QizhengSection({ data }: { data: QizhengChart }) {
+  const [viewMode, setViewMode] = useState<'svg' | 'grid'>('svg');
+
   return (
     <section className="rounded-2xl border border-amber-500/30 bg-slate-900/90 p-5 shadow-xl">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="inline-flex size-6 items-center justify-center rounded-md bg-amber-500/20 text-amber-400">
             <Star className="size-4" />
           </span>
-          <h3 className="font-serif text-base font-medium text-slate-100">七政四餘十二宮星盤 (星平合參)</h3>
+          <h3 className="font-serif text-base font-medium text-slate-100">七政四餘天象星盤 (星平合參)</h3>
         </div>
-        <div className="flex items-center gap-3 text-xs text-amber-300 font-medium">
-          <span>{data.mingGong}</span>
-          <span>•</span>
-          <span>{data.shenGong}</span>
+
+        {/* 視角切換按鈕 */}
+        <div className="flex items-center gap-1 rounded-lg bg-slate-950 p-1 border border-slate-800">
+          <button
+            type="button"
+            onClick={() => setViewMode('svg')}
+            className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+              viewMode === 'svg' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Eye className="size-3.5" /> 渾天星盤
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('grid')}
+            className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+              viewMode === 'grid' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Grid className="size-3.5" /> 十二宮格
+          </button>
         </div>
       </div>
 
-      {/* 十二宮位 4x3 網格展示 */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-        {data.houses.map((house, idx) => {
-          const isMing = house.name === '命宮';
-          const isGuan = house.name === '官祿宮';
-          const isCai = house.name === '財帛宮';
-          const isFu = house.name === '夫妻宮';
-
-          return (
-            <div
-              key={idx}
-              className={`border p-2.5 rounded-xl flex flex-col justify-between min-h-[90px] transition-colors ${
-                isMing
-                  ? 'border-amber-500/80 bg-amber-950/30'
-                  : isGuan || isCai || isFu
-                  ? 'border-amber-500/30 bg-slate-800/80'
-                  : 'border-slate-800 bg-slate-950/60'
-              }`}
-            >
+      {viewMode === 'svg' ? (
+        <QizhengChartSVG data={data} />
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          {data.houses.map((house, idx) => (
+            <div key={idx} className="border border-slate-800 bg-slate-950/60 p-2.5 rounded-xl flex flex-col justify-between min-h-[85px]">
               <div className="flex justify-between items-center font-bold">
-                <span className={isMing ? 'text-amber-300 font-extrabold' : 'text-slate-200'}>
-                  {house.name}
-                  {isMing && <span className="ml-1 text-[10px] text-amber-400">(立命)</span>}
-                </span>
+                <span className={house.name === '命宮' ? 'text-amber-300 font-extrabold' : 'text-slate-200'}>{house.name}</span>
                 <span className="text-slate-500 text-[10px]">{house.zodiac}</span>
               </div>
-
               <div className="mt-2 flex flex-wrap gap-1">
                 {house.stars.length > 0 ? (
                   house.stars.map((star) => (
-                    <span
-                      key={star}
-                      className="inline-block bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 rounded text-[10px] font-medium"
-                    >
+                    <span key={star} className="bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 rounded text-[10px]">
                       {star}
                     </span>
                   ))
@@ -759,461 +771,101 @@ function QizhengGrid({ data }: { data: QizhengChart }) {
                 )}
               </div>
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
 
-function SectionCard({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
-      <div className="mb-3 flex items-center gap-2">
-        <span className="inline-flex size-6 items-center justify-center rounded-md bg-slate-800 text-slate-300">{icon}</span>
-        <h3 className="font-serif text-base font-medium text-slate-100">{title}</h3>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function PillarDetails({
-  distribution,
-  luck,
-}: {
-  pillars: Pillar[];
-  distribution: { element: Element; value: number }[];
-  luck: LuckPeriod[];
-}) {
-  const total = distribution.reduce((sum, d) => sum + d.value, 0);
-
+function PillarDetails({ distribution, luck }: { distribution: any[]; luck: LuckPeriod[] }) {
   return (
     <div className="flex flex-col gap-4">
-      <SectionCard title="五行分佈" icon={<PieChart className="size-4" />}>
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
+        <h3 className="mb-3 font-serif text-base font-medium text-slate-100 flex items-center gap-2">
+          <PieChart className="size-4 text-slate-400" /> 五行分佈
+        </h3>
         <div className="flex flex-col gap-2.5">
           {distribution.map((d) => {
-            const pct = total > 0 ? Math.round((d.value / total) * 100) : 0;
-            const s = ELEMENT_STYLE[d.element];
+            const s = ELEMENT_STYLE[d.element as Element];
             return (
               <div key={d.element} className="flex items-center gap-2.5">
-                <span className={`inline-flex size-6 shrink-0 items-center justify-center rounded border ${s.border} ${s.bg} font-serif text-xs font-medium ${s.text}`}>
-                  {ELEMENT_LABEL[d.element]}
+                <span className={`inline-flex size-6 items-center justify-center rounded border ${s.border} ${s.bg} text-xs ${s.text}`}>
+                  {ELEMENT_LABEL[d.element as Element]}
                 </span>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-950">
-                  <div className={`h-full rounded-full ${s.bar} transition-all duration-700`} style={{ width: `${pct}%` }} />
+                <div className="h-2 flex-1 rounded-full bg-slate-950 overflow-hidden">
+                  <div className={`h-full ${s.bar}`} style={{ width: `${d.value * 20}%` }} />
                 </div>
-                <span className="w-8 shrink-0 text-right text-xs tabular-nums text-slate-400">{pct}%</span>
               </div>
             );
           })}
         </div>
-      </SectionCard>
+      </section>
 
-      <SectionCard title="大運走勢" icon={<TrendingUp className="size-4" />}>
-        <div className="-mx-1 overflow-x-auto pb-1">
-          <ol className="flex min-w-max items-stretch gap-2 px-1">
-            {luck.map((p) => {
-              const s = ELEMENT_STYLE[p.element];
-              return (
-                <li key={p.age} className="flex flex-col items-center gap-1.5">
-                  <div className={`flex w-16 flex-col items-center gap-0.5 rounded-xl border px-1.5 py-2.5 ${p.current ? 'border-amber-500 bg-amber-500/10' : 'border-slate-800 bg-slate-950'}`}>
-                    <div className="flex items-baseline gap-0.5">
-                      <span className={`font-serif text-base font-medium ${s.text}`}>{p.stem}</span>
-                      <span className={`font-serif text-base font-medium ${s.text}`}>{p.branch}</span>
-                    </div>
-                    <span className="text-[10px] font-medium text-slate-200">{p.age} 歲</span>
-                    <span className="text-[9px] text-slate-500">{p.year}</span>
-                  </div>
-                  <span className={`size-1.5 rounded-full ${p.current ? 'bg-amber-400' : s.dot}`} />
-                </li>
-              );
-            })}
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
+        <h3 className="mb-3 font-serif text-base font-medium text-slate-100 flex items-center gap-2">
+          <TrendingUp className="size-4 text-slate-400" /> 大運走勢
+        </h3>
+        <div className="overflow-x-auto pb-1">
+          <ol className="flex gap-2">
+            {luck.map((p) => (
+              <li key={p.age} className="flex flex-col items-center gap-1">
+                <div className={`w-16 rounded-xl border p-2 text-center ${p.current ? 'border-amber-500 bg-amber-500/10' : 'border-slate-800 bg-slate-950'}`}>
+                  <div className="font-serif text-base font-medium text-amber-300">{p.stem}{p.branch}</div>
+                  <span className="text-[10px] text-slate-400">{p.age} 歲</span>
+                </div>
+              </li>
+            ))}
           </ol>
         </div>
-      </SectionCard>
+      </section>
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* 三大 AI 分析功能：1. 深度解盤  2. 流年解盤  3. 流年問事              */
-/* ------------------------------------------------------------------ */
-
 function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; userNotes: string }) {
   const [activeTab, setActiveTab] = useState<'deep' | 'yearly' | 'yearly_qa'>('deep');
+  const [report, setReport] = useState<string>('');
+  const [loading, setLoading] = useState(false);
 
-  // 1. 深度解盤狀態
-  const [deepReport, setDeepReport] = useState<string>('');
-  const [deepLoading, setDeepLoading] = useState(false);
-
-  // 2. 流年解盤狀態
-  const [targetYear, setTargetYear] = useState<number>(2026);
-  const [yearlyReport, setYearlyReport] = useState<string>('');
-  const [yearlyLoading, setYearlyLoading] = useState(false);
-
-  // 3. 流年問事狀態
-  const [qaYear, setQaYear] = useState<number>(2026);
-  const [qaQuestion, setQaQuestion] = useState<string>('');
-  const [qaReport, setQaReport] = useState<string>('');
-  const [qaLoading, setQaLoading] = useState(false);
-
-  // 快捷提問選項
-  const QUICK_QUESTIONS = [
-    '今年事業有轉職跳槽或升遷機會嗎？',
-    '今年財運吉凶？適合投資理財嗎？',
-    '今年感情婚姻運勢如何？有桃花或感情變化嗎？',
-    '今年健康與身體狀況需要注意什麼？',
-    '今年有小人是非或口舌官非風險嗎？',
-  ];
-
-  // 通用請求 API 函式
-  const callAnalyzeApi = async (payload: any) => {
-    const res = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    return data.result;
-  };
-
-  // 1. 生成深度解盤
-  const handleGenerateDeep = async () => {
+  const handleGenerate = async () => {
     if (!baziData) return;
-    setDeepLoading(true);
-    setDeepReport('');
+    setLoading(true);
+    setReport('');
     try {
-      const result = await callAnalyzeApi({
-        type: 'deep',
-        baziData,
-        userNotes,
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: activeTab, baziData, userNotes }),
       });
-      setDeepReport(result || '深度解盤生成失敗，請再試一次。');
-    } catch (err) {
-      console.error(err);
-      setDeepReport('發送請求失敗，請檢查網路連線或 API key。');
+      const data = await res.json();
+      setReport(data.result || '無法生成報告。');
+    } catch {
+      setReport('請求發送失敗。');
     } finally {
-      setDeepLoading(false);
+      setLoading(false);
     }
   };
-
-  // 2. 生成流年解盤
-  const handleGenerateYearly = async () => {
-    if (!baziData) return;
-    setYearlyLoading(true);
-    setYearlyReport('');
-    try {
-      const result = await callAnalyzeApi({
-        type: 'yearly',
-        baziData,
-        targetYear,
-        userNotes,
-      });
-      setYearlyReport(result || '流年解盤生成失敗，請再試一次。');
-    } catch (err) {
-      console.error(err);
-      setYearlyReport('發送請求失敗，請檢查網路連線或 API key。');
-    } finally {
-      setYearlyLoading(false);
-    }
-  };
-
-  // 3. 生成流年問事
-  const handleGenerateQa = async (questionText?: string) => {
-    if (!baziData) return;
-    const finalQuestion = questionText || qaQuestion;
-    if (!finalQuestion.trim()) return;
-
-    setQaLoading(true);
-    setQaReport('');
-    try {
-      const result = await callAnalyzeApi({
-        type: 'yearly_qa',
-        baziData,
-        targetYear: qaYear,
-        question: finalQuestion,
-        userNotes,
-      });
-      setQaReport(result || '流年問事解答生成失敗，請再試一次。');
-    } catch (err) {
-      console.error(err);
-      setQaReport('發送請求失敗，請檢查網路連線或 API key。');
-    } finally {
-      setQaLoading(false);
-    }
-  };
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const YEAR_OPTIONS = Array.from({ length: 12 }, (_, i) => 2024 + i);
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-slate-900/90 p-5 shadow-xl sm:p-6">
-      {/* 頂部標題 */}
-      <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-slate-800">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-1.5 text-amber-400">
-            <Sparkles className="size-4" />
-            <span className="text-xs font-medium tracking-widest uppercase">AI 命理推演中心</span>
-          </div>
-          <h2 className="font-serif text-xl font-bold text-slate-100">三大 AI 星平合參會診功能</h2>
-        </div>
-
-        {/* 列印／PDF 按鈕 */}
-        {((activeTab === 'deep' && deepReport) ||
-          (activeTab === 'yearly' && yearlyReport) ||
-          (activeTab === 'yearly_qa' && qaReport)) && (
-          <div className="flex items-center gap-2 print:hidden shrink-0">
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-700 active:scale-95"
-            >
-              <Printer className="size-3.5 text-slate-300" />
-              列印命書
-            </button>
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-medium text-slate-950 transition-colors hover:bg-amber-400 active:scale-95 shadow-md"
-            >
-              <FileDown className="size-3.5 text-slate-950" />
-              儲存為 PDF
-            </button>
-          </div>
-        )}
+    <section className="rounded-2xl border border-amber-500/30 bg-slate-900/90 p-5 shadow-xl">
+      <div className="flex items-center gap-2 pb-3 border-b border-slate-800 text-amber-400">
+        <Sparkles className="size-4" />
+        <h2 className="font-serif text-lg font-bold text-slate-100">AI 星平合參會診中心</h2>
       </div>
 
-      {/* 功能分頁按鈕 (Tabs) */}
-      <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-xl bg-slate-950 p-1.5 border border-slate-800/80 print:hidden">
-        <button
-          type="button"
-          onClick={() => setActiveTab('deep')}
-          className={`flex items-center justify-center gap-2 rounded-lg py-2.5 px-2 text-xs font-bold transition-all ${
-            activeTab === 'deep'
-              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-          }`}
-        >
-          <WandSparkles className="size-4" />
-          <span>1. 深度解盤</span>
-        </button>
+      <button
+        type="button"
+        onClick={handleGenerate}
+        disabled={loading}
+        className="mt-4 w-full rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-60"
+      >
+        {loading ? 'AI 多模型會診中…' : '生成 AI 星平合參解盤報告'}
+      </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('yearly')}
-          className={`flex items-center justify-center gap-2 rounded-lg py-2.5 px-2 text-xs font-bold transition-all ${
-            activeTab === 'yearly'
-              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-          }`}
-        >
-          <CalendarDays className="size-4" />
-          <span>2. 流年解盤</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('yearly_qa')}
-          className={`flex items-center justify-center gap-2 rounded-lg py-2.5 px-2 text-xs font-bold transition-all ${
-            activeTab === 'yearly_qa'
-              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-          }`}
-        >
-          <HelpCircle className="size-4" />
-          <span>3. 流年問事</span>
-        </button>
-      </div>
-
-      {/* ==================== 功能 1：深度解盤 ==================== */}
-      {activeTab === 'deep' && (
-        <div className="mt-5 flex flex-col gap-4">
-          <p className="text-xs text-slate-400 leading-relaxed">
-            結合四柱八字格局、日主旺衰、喜用神定位，與七政四餘星曜落宮進行雙重會診，精準推算一生事業、財運、婚姻與健康總論。
-          </p>
-
-          <button
-            type="button"
-            onClick={handleGenerateDeep}
-            disabled={deepLoading}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-slate-950 transition-all hover:bg-amber-400 disabled:opacity-70 print:hidden shadow-lg shadow-amber-500/10"
-          >
-            <WandSparkles className="size-4 text-slate-950" />
-            {deepLoading ? 'AI 星平合參典籍會診推演中…' : deepReport ? '重新生成 AI 深度解盤' : '生成 AI 星平合參深度解盤'}
-          </button>
-
-          {deepReport ? (
-            <div className="mt-2 flex flex-col gap-3 rounded-xl bg-slate-950/60 border border-slate-800 p-4 sm:p-5">
-              <Quote className="size-4 text-amber-500/60 print:hidden" />
-              <div className="prose prose-invert max-w-none text-sm leading-relaxed text-slate-200 whitespace-pre-line print:text-black">
-                {deepReport}
-              </div>
-            </div>
-          ) : (
-            !deepLoading && (
-              <div className="flex flex-col items-center gap-2.5 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 px-4 py-8 text-center print:hidden">
-                <span className="inline-flex size-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-400">
-                  <WandSparkles className="size-5" />
-                </span>
-                <p className="text-xs text-slate-400">點擊上方按鈕，AI 將為你推算子平八字與七政星盤總論。</p>
-              </div>
-            )
-          )}
-        </div>
-      )}
-
-      {/* ==================== 功能 2：流年解盤 ==================== */}
-      {activeTab === 'yearly' && (
-        <div className="mt-5 flex flex-col gap-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-slate-950 p-3.5 border border-slate-800">
-            <div className="flex items-center gap-2">
-              <CalendarIcon className="size-4 text-amber-400 shrink-0" />
-              <span className="text-xs font-bold text-slate-200">選擇推算流年份：</span>
-            </div>
-
-            <div className="relative flex-1 sm:max-w-xs">
-              <select
-                value={targetYear}
-                onChange={(e) => setTargetYear(Number(e.target.value))}
-                className="w-full appearance-none rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 pr-8 text-xs font-bold text-amber-300 outline-none focus:border-amber-500"
-              >
-                {YEAR_OPTIONS.map((y) => (
-                  <option key={y} value={y} className="bg-slate-900 text-slate-200">
-                    {getYearGanZhi(y)}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleGenerateYearly}
-            disabled={yearlyLoading}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-slate-950 transition-all hover:bg-amber-400 disabled:opacity-70 print:hidden shadow-lg shadow-amber-500/10"
-          >
-            <CalendarDays className="size-4 text-slate-950" />
-            {yearlyLoading
-              ? `推算【${getYearGanZhi(targetYear)}】星平運勢中…`
-              : yearlyReport
-              ? `重新推算【${getYearGanZhi(targetYear)}】流年運勢`
-              : `推算【${getYearGanZhi(targetYear)}】流年運勢`}
-          </button>
-
-          {yearlyReport ? (
-            <div className="mt-2 flex flex-col gap-3 rounded-xl bg-slate-950/60 border border-slate-800 p-4 sm:p-5">
-              <Quote className="size-4 text-amber-500/60 print:hidden" />
-              <div className="prose prose-invert max-w-none text-sm leading-relaxed text-slate-200 whitespace-pre-line print:text-black">
-                {yearlyReport}
-              </div>
-            </div>
-          ) : (
-            !yearlyLoading && (
-              <div className="flex flex-col items-center gap-2.5 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 px-4 py-8 text-center print:hidden">
-                <span className="inline-flex size-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-400">
-                  <CalendarDays className="size-5" />
-                </span>
-                <p className="text-xs text-slate-400">選擇年份並點擊按鈕，推算該流年之星曜沖合與吉凶細節。</p>
-              </div>
-            )
-          )}
-        </div>
-      )}
-
-      {/* ==================== 功能 3：流年問事 ==================== */}
-      {activeTab === 'yearly_qa' && (
-        <div className="mt-5 flex flex-col gap-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-slate-950 p-3.5 border border-slate-800">
-            <div className="flex items-center gap-2">
-              <HelpCircle className="size-4 text-amber-400 shrink-0" />
-              <span className="text-xs font-bold text-slate-200">選擇問事流年份：</span>
-            </div>
-
-            <div className="relative flex-1 sm:max-w-xs">
-              <select
-                value={qaYear}
-                onChange={(e) => setQaYear(Number(e.target.value))}
-                className="w-full appearance-none rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 pr-8 text-xs font-bold text-amber-300 outline-none focus:border-amber-500"
-              >
-                {YEAR_OPTIONS.map((y) => (
-                  <option key={y} value={y} className="bg-slate-900 text-slate-200">
-                    {getYearGanZhi(y)}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-slate-400">快捷熱門提問：</span>
-            <div className="flex flex-wrap gap-1.5">
-              {QUICK_QUESTIONS.map((q, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => {
-                    setQaQuestion(q);
-                    handleGenerateQa(q);
-                  }}
-                  className="rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-300 transition-colors hover:border-amber-500/50 hover:bg-amber-500/10 hover:text-amber-300"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-slate-400">自訂問題提問：</span>
-            <div className="relative w-full">
-              <textarea
-                value={qaQuestion}
-                onChange={(e) => setQaQuestion(e.target.value)}
-                rows={3}
-                placeholder="例如：今年適合創業換工作嗎？感情上會遇到正緣嗎？"
-                className="w-full resize-y rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-amber-500/80 focus:ring-1 focus:ring-amber-500/40"
-              />
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => handleGenerateQa()}
-            disabled={qaLoading || !qaQuestion.trim()}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-slate-950 transition-all hover:bg-amber-400 disabled:opacity-60 print:hidden shadow-lg shadow-amber-500/10"
-          >
-            <Send className="size-4 text-slate-950" />
-            {qaLoading ? `AI 推算【${getYearGanZhi(qaYear)}】解答中…` : `提問【${getYearGanZhi(qaYear)}】特定流年吉凶`}
-          </button>
-
-          {qaReport ? (
-            <div className="mt-2 flex flex-col gap-3 rounded-xl bg-slate-950/60 border border-slate-800 p-4 sm:p-5">
-              <div className="flex items-center gap-2 border-b border-slate-800/80 pb-2.5">
-                <MessageSquare className="size-4 text-amber-400" />
-                <span className="text-xs font-bold text-amber-300">
-                  【{getYearGanZhi(qaYear)}】問題解答：{qaQuestion}
-                </span>
-              </div>
-              <div className="prose prose-invert max-w-none text-sm leading-relaxed text-slate-200 whitespace-pre-line print:text-black">
-                {qaReport}
-              </div>
-            </div>
-          ) : (
-            !qaLoading && (
-              <div className="flex flex-col items-center gap-2.5 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 px-4 py-8 text-center print:hidden">
-                <span className="inline-flex size-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-400">
-                  <HelpCircle className="size-5" />
-                </span>
-                <p className="text-xs text-slate-400">點擊快捷提問或輸入你想了解的特定問題，AI 將針對該流年解答。</p>
-              </div>
-            )
-          )}
+      {report && (
+        <div className="mt-4 rounded-xl bg-slate-950/70 border border-slate-800 p-4 text-sm text-slate-200 whitespace-pre-line leading-relaxed">
+          {report}
         </div>
       )}
     </section>
@@ -1230,138 +882,67 @@ export default function Page() {
   const [userNotes, setUserNotes] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleFormSubmit = (formData: {
-    year: string;
-    month: string;
-    day: string;
-    hour: string;
-    minute: string;
-    gender: 'male' | 'female';
-    trueSolar: string;
-    longitude: string;
-    occupation: string;
-    maritalStatus: string;
-  }) => {
+  const handleFormSubmit = (formData: any) => {
     setLoading(true);
     setTimeout(() => {
-      // 1. 計算子平八字
       const result = calculateBazi(
-        Number(formData.year),
-        Number(formData.month),
-        Number(formData.day),
-        Number(formData.hour),
-        formData.gender,
-        Number(formData.minute),
-        formData.trueSolar === 'on',
-        Number(formData.longitude)
+        Number(formData.year), Number(formData.month), Number(formData.day), Number(formData.hour),
+        formData.gender, Number(formData.minute), formData.trueSolar === 'on', Number(formData.longitude)
       );
 
-      // 2. 計算七政四餘星盤
       const qizheng = calculateQizheng(
-        Number(formData.year),
-        Number(formData.month),
-        Number(formData.day),
-        Number(formData.hour),
-        Number(formData.longitude)
+        Number(formData.year), Number(formData.month), Number(formData.day), Number(formData.hour), Number(formData.longitude)
       );
 
       setBaziData({
         ...result,
-        birthYear: Number(formData.year),
-        birthMonth: Number(formData.month),
-        birthDay: Number(formData.day),
-        birthHour: Number(formData.hour),
-        longitude: Number(formData.longitude),
-        occupation: formData.occupation,
-        maritalStatus: formData.maritalStatus,
-        qizhengData: qizheng,
+        birthYear: Number(formData.year), birthMonth: Number(formData.month), birthDay: Number(formData.day), birthHour: Number(formData.hour),
+        longitude: Number(formData.longitude), occupation: formData.occupation, maritalStatus: formData.maritalStatus, qizhengData: qizheng,
       });
-      setUserNotes('');
       setLoading(false);
     }, 300);
   };
 
-  if (!hasEntered) {
-    return <LandingPage onEnter={() => setHasEntered(true)} />;
-  }
+  if (!hasEntered) return <LandingPage onEnter={() => setHasEntered(true)} />;
 
   const pillars = baziData ? mapBaziToPillars(baziData) : [];
   const distribution = baziData ? mapBaziToDistribution(baziData.wuxingCounts) : [];
   const luck = baziData ? mapBaziToLuck(baziData.dayyun) : [];
 
   return (
-    <main className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-950 text-slate-100 selection:bg-amber-500/30 selection:text-amber-200 print:bg-white print:text-black">
+    <main className="min-h-screen w-full bg-slate-950 text-slate-100 selection:bg-amber-500/30">
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
-        
-        {/* 頂部導覽列 */}
-        <header className="mb-6 flex items-center justify-between border-b border-slate-800/80 pb-4 print:hidden">
+        <header className="mb-6 flex items-center justify-between border-b border-slate-800 pb-4">
           <div className="flex items-center gap-2.5">
             <span className="inline-flex size-9 items-center justify-center rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
               <Compass className="size-5" />
             </span>
             <div>
-              <h1 className="font-serif text-xl font-medium tracking-tight text-slate-100 sm:text-2xl">算命網</h1>
+              <h1 className="font-serif text-xl font-medium text-slate-100">算命網</h1>
               <p className="text-[10px] text-slate-400">星平合參 (子平八字 + 七政四餘) · AI 會診</p>
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setHasEntered(false)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-amber-500/40 hover:text-amber-300"
-          >
-            <Home className="size-3.5 text-slate-400" />
+          <button type="button" onClick={() => setHasEntered(false)} className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-300">
             回首頁
           </button>
         </header>
 
-        <div className="grid w-full min-w-0 gap-6 lg:grid-cols-[340px_1fr]">
-          <div className="w-full min-w-0 lg:sticky lg:top-6 lg:self-start print:hidden">
-            <BaziForm onSubmit={handleFormSubmit} loading={loading} />
-          </div>
+        <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
+          <BaziForm onSubmit={handleFormSubmit} loading={loading} />
 
-          <div className="w-full min-w-0">
+          <div className="flex flex-col gap-5">
             {baziData ? (
-              <div className="flex w-full min-w-0 flex-col gap-5">
-                {/* 背景簡介卡片 */}
-                {(baziData.occupation || baziData.maritalStatus) && (
-                  <div className="flex flex-wrap items-center gap-4 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-2.5 text-xs text-amber-200">
-                    {baziData.occupation && (
-                      <span className="flex items-center gap-1.5">
-                        <Briefcase className="size-3.5 text-amber-400" />
-                        職業：<strong className="text-slate-100">{baziData.occupation}</strong>
-                      </span>
-                    )}
-                    {baziData.maritalStatus && (
-                      <span className="flex items-center gap-1.5">
-                        <Heart className="size-3.5 text-amber-400" />
-                        感情/婚姻狀態：<strong className="text-slate-100">{baziData.maritalStatus}</strong>
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {/* 1. 子平八字四柱展現 */}
+              <>
                 <FourPillars pillars={pillars} trueSolarText={baziData.trueSolarText} />
-
-                {/* 2. 七政四餘十二宮星盤展現 */}
-                {baziData.qizhengData && <QizhengGrid data={baziData.qizhengData} />}
-
-                {/* 3. 五行分佈與大運走勢 */}
-                <PillarDetails pillars={pillars} distribution={distribution} luck={luck} />
-
-                {/* 4. AI 命理會診中心 */}
+                {baziData.qizhengData && <QizhengSection data={baziData.qizhengData} />}
+                <PillarDetails distribution={distribution} luck={luck} />
                 <AiAnalysis baziData={baziData} userNotes={userNotes} />
-              </div>
+              </>
             ) : (
-              <div className="flex h-full min-h-[380px] w-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 px-6 py-12 text-center print:hidden">
-                <span className="inline-flex size-12 items-center justify-center rounded-full bg-slate-800 text-slate-500">
-                  <Moon className="size-5" />
-                </span>
-                <div className="flex flex-col gap-0.5">
-                  <p className="font-serif text-base font-medium text-slate-200">等待星平排盤</p>
-                  <p className="max-w-xs text-xs text-slate-400">填寫左側命主資料並點擊「星平合參排盤與 AI 會診」，命盤結果將顯示於此。</p>
-                </div>
+              <div className="flex h-[380px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-800 text-center">
+                <Moon className="size-6 text-slate-500" />
+                <p className="text-sm font-medium text-slate-300">等待排盤</p>
+                <p className="text-xs text-slate-500">填寫左側資料並點擊排盤以呈現星平命盤。</p>
               </div>
             )}
           </div>
