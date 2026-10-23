@@ -654,8 +654,14 @@ export default function Page() {
         formData.gender, Number(formData.minute), formData.trueSolar === 'on', Number(formData.longitude)
       );
 
+      // ✅ 已修正：精確傳入 (年, 月, 日, 時, 分, 經度) 6 個參數
       const qizheng = calculateQizheng(
-        Number(formData.year), Number(formData.month), Number(formData.day), Number(formData.hour), Number(formData.longitude)
+        Number(formData.year),
+        Number(formData.month),
+        Number(formData.day),
+        Number(formData.hour),
+        Number(formData.minute),
+        Number(formData.longitude)
       );
 
       setBaziData({
