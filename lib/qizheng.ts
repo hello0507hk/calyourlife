@@ -1,8 +1,6 @@
 /**
  * MORIA 七政四餘完全對齊排盤引擎 (lib/qizheng.ts)
- * 1. 七主星：UTC 標準時間 -> astronomy-engine JPL DE405 回歸黃道地心經度
- * 2. 四餘星：對齊 MORIA 平羅計、平月孛、果老紫氣算盤
- * 3. 廿八宿：今制黃道二十八宿邊界精確匹配 (含跨 0° 邊界判斷)
+ * 體制：黃道/赤道雙座標轉換 + astronomy-engine JPL 高精度算盤 + MORIA 果老星宗命宮平移法
  */
 
 import * as Astronomy from 'astronomy-engine';
@@ -10,7 +8,7 @@ import * as Astronomy from 'astronomy-engine';
 export interface StarPosition {
   name: string;
   type: '政' | '餘';
-  longitude: number;      // 黃道經度 (0° - 360°)
+  longitude: number;      // 黃道/赤道經度 (0° - 360°)
   zodiac: string;         // 落宮地支與星座
   wuxing: '木' | '火' | '土' | '金' | '水';
   mansion: string;        // 今制二十八宿
@@ -43,7 +41,7 @@ export interface QizhengChart {
 
 const BRANCHES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
 
-// MORIA 黃道十二宮 (0°為戌宮/白羊座起點，逆時針排列)
+// MORIA 黃道十二宮 (以 0° 戌宮/白羊座起點)
 const ZODIAC_SECTORS = [
   { branch: '戌', sign: '白羊座', wuxing: '火' as const, minDeg: 0, maxDeg: 30, ruler: '火星' },
   { branch: '酉', sign: '金牛座', wuxing: '金' as const, minDeg: 30, maxDeg: 60, ruler: '金星' },
@@ -59,7 +57,7 @@ const ZODIAC_SECTORS = [
   { branch: '亥', sign: '雙魚座', wuxing: '木' as const, minDeg: 330, maxDeg: 360, ruler: '木星' },
 ];
 
-// MORIA 今制二十八宿黃道對齊基準分度 (J2000 回歸黃道度數)
+// MORIA 今制二十八宿基準分度 (J2000 赤道/黃道對齊)
 const MORIA_28_MANSIONS = [
   { name: '角木蛟', startDeg: 201.0, span: 12.1, wuxing: '木' as const, ruler: '木星' },
   { name: '亢金龍', startDeg: 213.1, span: 9.3,  wuxing: '金' as const, ruler: '金星' },
@@ -98,7 +96,7 @@ function rev(deg: number): number {
   return d < 0 ? d + 360 : d;
 }
 
-// 精確適配廿八星宿及宿內度數（支援跨 0° 邊界，如室火豬與壁水蕐）
+// 匹配二十八宿（含跨 0° 邊界處理）
 function findMansion(long: number) {
   const l = rev(long);
   for (const m of MORIA_28_MANSIONS) {
@@ -110,7 +108,6 @@ function findMansion(long: number) {
         return { mansion: m, offset: l - start };
       }
     } else {
-      // 跨越 360°/0° 情況
       if (l >= start || l < end) {
         const offset = l >= start ? l - start : l + 360 - start;
         return { mansion: m, offset };
@@ -120,11 +117,18 @@ function findMansion(long: number) {
   return { mansion: MORIA_28_MANSIONS[0], offset: 0 };
 }
 
-// 獲取地心黃道經度 (Geocentric Ecliptic Longitude)
-function getEclipticLongitude(body: Astronomy.Body, date: Date): number {
+// 獲取地心黃經 (Ecliptic Longitude)
+function getEclipticLong(body: Astronomy.Body, date: Date): number {
   const geo = Astronomy.GeoVector(body, date, true);
   const ecl = Astronomy.Ecliptic(geo);
   return rev(ecl.elon);
+}
+
+// 獲取地心赤經 (Right Ascension 度數) - 用於 MORIA 赤道宿度模式
+function getRightAscension(body: Astronomy.Body, date: Date): number {
+  const geo = Astronomy.GeoVector(body, date, true);
+  const equ = Astronomy.Equator(body, date, true);
+  return rev(equ.ra * 15.0); // 將小時轉為角度 (1h = 15°)
 }
 
 export function calculateQizheng(
@@ -135,7 +139,7 @@ export function calculateQizheng(
   birthMinute: number = 0,
   longitude: number = 114.17
 ): QizhengChart {
-  // 1. 計算精確的 UTC 時區時間 (標準天文曆算時間點)
+  // 1. UTC 天文時間點
   const localTimeMinutes = birthHour * 60 + birthMinute;
   const utcTotalMinutes = localTimeMinutes - (longitude / 15.0) * 60;
   
@@ -158,7 +162,7 @@ export function calculateQizheng(
 
   const utcDate = new Date(Date.UTC(utcYear, utcMonth - 1, utcDay, utcH, utcM, utcS));
 
-  // 2. 算命真太陽時 (TST) - 用於立命宮與時支
+  // 2. 真太陽時 (TST)
   const lonDiffMin = (longitude - 120.0) * 4.0;
   const N_day = Math.floor(275 * birthMonth / 9) - Math.floor((birthMonth + 9) / 12) * (1 + Math.floor((birthYear - 4 * Math.floor(birthYear / 4) + 2) / 3)) + birthDay - 30;
   const B_eot = (360 / 365) * (N_day - 81) * (Math.PI / 180);
@@ -171,18 +175,18 @@ export function calculateQizheng(
   const tstMinute = Math.floor(totalMinutes % 60);
   const hourBranchIdx = Math.floor((tstHour + 1) / 2) % 12;
 
-  // 3. 高精度七主星 (日、月、金、木、水、火、土) 黃道經度
-  const sunLong = getEclipticLongitude(Astronomy.Body.Sun, utcDate);
-  const moonLong = getEclipticLongitude(Astronomy.Body.Moon, utcDate);
-  const mercuryLong = getEclipticLongitude(Astronomy.Body.Mercury, utcDate);
-  const venusLong = getEclipticLongitude(Astronomy.Body.Venus, utcDate);
-  const marsLong = getEclipticLongitude(Astronomy.Body.Mars, utcDate);
-  const jupiterLong = getEclipticLongitude(Astronomy.Body.Jupiter, utcDate);
-  const saturnLong = getEclipticLongitude(Astronomy.Body.Saturn, utcDate);
+  // 3. 高精度七主星經度 (黃道經度)
+  const sunLong = getEclipticLong(Astronomy.Body.Sun, utcDate);
+  const moonLong = getEclipticLong(Astronomy.Body.Moon, utcDate);
+  const mercuryLong = getEclipticLong(Astronomy.Body.Mercury, utcDate);
+  const venusLong = getEclipticLong(Astronomy.Body.Venus, utcDate);
+  const marsLong = getEclipticLong(Astronomy.Body.Mars, utcDate);
+  const jupiterLong = getEclipticLong(Astronomy.Body.Jupiter, utcDate);
+  const saturnLong = getEclipticLong(Astronomy.Body.Saturn, utcDate);
 
-  // 4. 四餘星 (MORIA 果老星宗標準算盤)
+  // 4. 四餘星 (MORIA 平交點/平遠地點算盤)
   const astroTime = Astronomy.MakeTime(utcDate);
-  const T = (astroTime.ut - 2451545.0) / 36525.0; // 儒略世紀數
+  const T = (astroTime.ut - 2451545.0) / 36525.0;
 
   // 羅睺 (昇交點 Node) & 計都 (降交點 = 羅睺 + 180°)
   const rahuLong = rev(125.04452 - 1934.136261 * T + 0.0020708 * T * T);
@@ -222,7 +226,7 @@ export function calculateQizheng(
     };
   });
 
-  // 5. MORIA 正宗果老星宗安命法："太陽加生時，順數逢卯止"
+  // 5. MORIA《果老星宗》正宗立命法："太陽加生時，順數逢卯止"
   const sunSector = ZODIAC_SECTORS.find(s => sunLong >= s.minDeg && sunLong < s.maxDeg) || ZODIAC_SECTORS[0];
   const sunBranchIdx = BRANCHES.indexOf(sunSector.branch);
   const sunOffsetInSector = sunLong - sunSector.minDeg;
@@ -233,6 +237,7 @@ export function calculateQizheng(
   const mingBranch = BRANCHES[mingBranchIdx];
   const mingSector = ZODIAC_SECTORS.find(s => s.branch === mingBranch)!;
 
+  // 太陽宮餘度平移至命宮
   const exactMingLong = rev(mingSector.minDeg + sunOffsetInSector);
   const { mansion: mingMansion, offset: mingOffset } = findMansion(exactMingLong);
 
