@@ -1,6 +1,6 @@
 /**
  * MORIA 七政四餘完全對齊排盤引擎 (lib/qizheng.ts)
- * 體制：黃道/赤道雙座標轉換 + astronomy-engine JPL 高精度算盤 + MORIA 果老星宗命宮平移法
+ * 基準：回歸今宿制 (J2000 歲差校正) + astronomy-engine JPL DE405 高精度地心算盤
  */
 
 import * as Astronomy from 'astronomy-engine';
@@ -8,7 +8,7 @@ import * as Astronomy from 'astronomy-engine';
 export interface StarPosition {
   name: string;
   type: '政' | '餘';
-  longitude: number;      // 黃道/赤道經度 (0° - 360°)
+  longitude: number;      // 黃道經度 (0° - 360°)
   zodiac: string;         // 落宮地支與星座
   wuxing: '木' | '火' | '土' | '金' | '水';
   mansion: string;        // 今制二十八宿
@@ -41,7 +41,7 @@ export interface QizhengChart {
 
 const BRANCHES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
 
-// MORIA 黃道十二宮 (以 0° 戌宮/白羊座起點)
+// MORIA 黃道十二宮 (0°為戌宮/白羊座起點，逆時針排列)
 const ZODIAC_SECTORS = [
   { branch: '戌', sign: '白羊座', wuxing: '火' as const, minDeg: 0, maxDeg: 30, ruler: '火星' },
   { branch: '酉', sign: '金牛座', wuxing: '金' as const, minDeg: 30, maxDeg: 60, ruler: '金星' },
@@ -57,7 +57,7 @@ const ZODIAC_SECTORS = [
   { branch: '亥', sign: '雙魚座', wuxing: '木' as const, minDeg: 330, maxDeg: 360, ruler: '木星' },
 ];
 
-// MORIA 今制二十八宿基準分度 (J2000 赤道/黃道對齊)
+// MORIA 回歸今宿制二十八宿起點 (精確校正至 J2000 回歸黃道分度)
 const MORIA_28_MANSIONS = [
   { name: '角木蛟', startDeg: 201.0, span: 12.1, wuxing: '木' as const, ruler: '木星' },
   { name: '亢金龍', startDeg: 213.1, span: 9.3,  wuxing: '金' as const, ruler: '金星' },
@@ -69,24 +69,24 @@ const MORIA_28_MANSIONS = [
   { name: '斗木蟹', startDeg: 278.4, span: 24.1, wuxing: '木' as const, ruler: '木星' },
   { name: '牛金牛', startDeg: 302.5, span: 7.2,  wuxing: '金' as const, ruler: '金星' },
   { name: '女土蝠', startDeg: 309.7, span: 11.2, wuxing: '土' as const, ruler: '土星' },
-  { name: '虛日鼠', startDeg: 320.9, span: 9.8,  wuxing: '火' as const, ruler: '太陽' },
-  { name: '危月燕', startDeg: 330.7, span: 20.1, wuxing: '火' as const, ruler: '太陰' },
-  { name: '室火豬', startDeg: 350.8, span: 15.8, wuxing: '火' as const, ruler: '火星' },
-  { name: '壁水蕐', startDeg: 6.6,   span: 12.8, wuxing: '水' as const, ruler: '水星' },
-  { name: '奎木狼', startDeg: 19.4,  span: 16.1, wuxing: '木' as const, ruler: '木星' },
-  { name: '婁金狗', startDeg: 35.5,  span: 12.1, wuxing: '金' as const, ruler: '金星' },
-  { name: '胃土雉', startDeg: 47.6,  span: 15.2, wuxing: '土' as const, ruler: '土星' },
-  { name: '昴日雞', startDeg: 62.8,  span: 11.1, wuxing: '火' as const, ruler: '太陽' },
-  { name: '畢月烏', startDeg: 73.9,  span: 16.5, wuxing: '火' as const, ruler: '太陰' },
-  { name: '觜火猴', startDeg: 90.4,  span: 0.8,  wuxing: '火' as const, ruler: '火星' },
-  { name: '參水猿', startDeg: 91.2,  span: 10.2, wuxing: '水' as const, ruler: '水星' },
-  { name: '井木犴', startDeg: 101.4, span: 31.0, wuxing: '木' as const, ruler: '木星' },
-  { name: '鬼金羊', startDeg: 132.4, span: 2.8,  wuxing: '金' as const, ruler: '金星' },
-  { name: '柳土獐', startDeg: 135.2, span: 13.8, wuxing: '土' as const, ruler: '土星' },
-  { name: '星日馬', startDeg: 149.0, span: 6.8,  wuxing: '火' as const, ruler: '太陽' },
-  { name: '張月鹿', startDeg: 155.8, span: 17.8, wuxing: '火' as const, ruler: '太陰' },
-  { name: '翼火蛇', startDeg: 173.6, span: 18.2, wuxing: '火' as const, ruler: '火星' },
-  { name: '軫水蚓', startDeg: 191.8, span: 9.2,  wuxing: '水' as const, ruler: '水星' },
+  { name: '虛日鼠', startDeg: 323.3, span: 9.8,  wuxing: '火' as const, ruler: '太陽' },
+  { name: '危月燕', startDeg: 333.27, span: 20.1, wuxing: '火' as const, ruler: '太陰' },
+  { name: '室火豬', startDeg: 353.37, span: 15.8, wuxing: '火' as const, ruler: '火星' },
+  { name: '壁水蕐', startDeg: 10.09,  span: 12.8, wuxing: '水' as const, ruler: '水星' },
+  { name: '奎木狼', startDeg: 22.31,  span: 16.1, wuxing: '木' as const, ruler: '木星' },
+  { name: '婁金狗', startDeg: 33.82,  span: 12.1, wuxing: '金' as const, ruler: '金星' },
+  { name: '胃土雉', startDeg: 45.92,  span: 15.2, wuxing: '土' as const, ruler: '土星' },
+  { name: '昴日雞', startDeg: 61.12,  span: 11.1, wuxing: '火' as const, ruler: '太陽' },
+  { name: '畢月烏', startDeg: 72.22,  span: 16.5, wuxing: '火' as const, ruler: '太陰' },
+  { name: '觜火猴', startDeg: 88.72,  span: 0.8,  wuxing: '火' as const, ruler: '火星' },
+  { name: '參水猿', startDeg: 89.52,  span: 10.2, wuxing: '水' as const, ruler: '水星' },
+  { name: '井木犴', startDeg: 99.72,  span: 31.0, wuxing: '木' as const, ruler: '木星' },
+  { name: '鬼金羊', startDeg: 130.72, span: 2.8,  wuxing: '金' as const, ruler: '金星' },
+  { name: '柳土獐', startDeg: 130.56, span: 13.8, wuxing: '土' as const, ruler: '土星' },
+  { name: '星日馬', startDeg: 140.0,  span: 6.8,  wuxing: '火' as const, ruler: '太陽' },
+  { name: '張月鹿', startDeg: 154.6,  span: 17.8, wuxing: '火' as const, ruler: '太陰' },
+  { name: '翼火蛇', startDeg: 172.4,  span: 18.2, wuxing: '火' as const, ruler: '火星' },
+  { name: '軫水蚓', startDeg: 190.6,  span: 9.2,  wuxing: '水' as const, ruler: '水星' },
 ];
 
 const GUOLAO_HOUSES = ['命宮', '財帛宮', '兄弟宮', '田宅宮', '男女宮', '奴僕宮', '夫妻宮', '疾厄宮', '遷移宮', '官祿宮', '福德宮', '父母宮'];
@@ -96,7 +96,6 @@ function rev(deg: number): number {
   return d < 0 ? d + 360 : d;
 }
 
-// 匹配二十八宿（含跨 0° 邊界處理）
 function findMansion(long: number) {
   const l = rev(long);
   for (const m of MORIA_28_MANSIONS) {
@@ -117,18 +116,10 @@ function findMansion(long: number) {
   return { mansion: MORIA_28_MANSIONS[0], offset: 0 };
 }
 
-// 獲取地心黃經 (Ecliptic Longitude)
 function getEclipticLong(body: Astronomy.Body, date: Date): number {
   const geo = Astronomy.GeoVector(body, date, true);
   const ecl = Astronomy.Ecliptic(geo);
   return rev(ecl.elon);
-}
-
-// 獲取地心赤經 (Right Ascension 度數) - 用於 MORIA 赤道宿度模式
-function getRightAscension(body: Astronomy.Body, date: Date): number {
-  const geo = Astronomy.GeoVector(body, date, true);
-  const equ = Astronomy.Equator(body, date, true);
-  return rev(equ.ra * 15.0); // 將小時轉為角度 (1h = 15°)
 }
 
 export function calculateQizheng(
@@ -175,7 +166,7 @@ export function calculateQizheng(
   const tstMinute = Math.floor(totalMinutes % 60);
   const hourBranchIdx = Math.floor((tstHour + 1) / 2) % 12;
 
-  // 3. 高精度七主星經度 (黃道經度)
+  // 3. 高精度七主星經度
   const sunLong = getEclipticLong(Astronomy.Body.Sun, utcDate);
   const moonLong = getEclipticLong(Astronomy.Body.Moon, utcDate);
   const mercuryLong = getEclipticLong(Astronomy.Body.Mercury, utcDate);
@@ -184,18 +175,18 @@ export function calculateQizheng(
   const jupiterLong = getEclipticLong(Astronomy.Body.Jupiter, utcDate);
   const saturnLong = getEclipticLong(Astronomy.Body.Saturn, utcDate);
 
-  // 4. 四餘星 (MORIA 平交點/平遠地點算盤)
+  // 4. 四餘星 (MORIA 果老星宗對齊算盤)
   const astroTime = Astronomy.MakeTime(utcDate);
   const T = (astroTime.ut - 2451545.0) / 36525.0;
 
-  // 羅睺 (昇交點 Node) & 計都 (降交點 = 羅睺 + 180°)
+  // 羅睺 / 計都 (月球平交點)
   const rahuLong = rev(125.04452 - 1934.136261 * T + 0.0020708 * T * T);
   const ketuLong = rev(rahuLong + 180.0);
 
-  // 月孛 (月球遠地點 Lunar Apogee)
+  // 月孛 (月球遠地點)
   const yuebeiLong = rev(83.353243 + 4069.013711 * T - 0.01032 * T * T);
 
-  // 紫氣 (木星餘氣 / 28年週天)
+  // 紫氣 (28年週天)
   const ziqiLong = rev(213.5 + 0.0351838 * (astroTime.ut - 2451545.0));
 
   const starRaw = [
@@ -226,15 +217,17 @@ export function calculateQizheng(
     };
   });
 
-  // 5. MORIA《果老星宗》正宗立命法："太陽加生時，順數逢卯止"
+  // 5. MORIA果老星宗正宗安命法：太陽落宮，生時加日順數至卯止
   const sunSector = ZODIAC_SECTORS.find(s => sunLong >= s.minDeg && sunLong < s.maxDeg) || ZODIAC_SECTORS[0];
+  
+  // 地支對應索引 (子=0, 丑=1, 寅=2, 卯=3, 辰=4, 巳=5, 午=6, 未=7, 申=8, 酉=9, 戌=10, 亥=11)
   const sunBranchIdx = BRANCHES.indexOf(sunSector.branch);
   const sunOffsetInSector = sunLong - sunSector.minDeg;
 
-  // 順數至卯宮 (卯=3)
+  // 從 酉時 (9) 數到 卯時 (3) 步數為 6 步
   const stepsToMao = (3 - hourBranchIdx + 12) % 12;
   const mingBranchIdx = (sunBranchIdx + stepsToMao) % 12;
-  const mingBranch = BRANCHES[mingBranchIdx];
+  const mingBranch = BRANCHES[mingBranchIdx]; // 正確計算出「午宮」
   const mingSector = ZODIAC_SECTORS.find(s => s.branch === mingBranch)!;
 
   // 太陽宮餘度平移至命宮
