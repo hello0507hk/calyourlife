@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { QizhengChart } from '@/lib/qizheng';
-import { GitCommit, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { SlidersHorizontal, Sparkles } from 'lucide-react';
 
 interface TooltipInfo {
   x: number;
@@ -17,36 +17,33 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
   const [showAspects, setShowAspects] = useState<boolean>(true);
   const [tooltip, setTooltip] = useState<TooltipInfo | null>(null);
 
-  // SVG 畫布整體尺寸與圓心
   const size = 680;
   const center = size / 2;
 
-  // 果老星宗多重同心圓半徑定點 (由內至外)
-  const rInner = 42;       // 圓心 (立命/度數)
-  const rZodiac = 100;     // 環1：地支 (子丑寅卯) + 星座代碼 (Aqu, Cap...) + 五行
-  const rHouse = 150;      // 環2：後天十二宮 (命宮, 財帛...)
-  const rStars = 198;      // 環3：七政四餘星曜駐留環
-  const rMansion = 242;    // 環4：二十八宿 (角亢氐房...)
-  const rShensha = 288;    // 環5：叢辰神煞細字環
-  const rOuterYears = 325; // 環6：大運流年年限環 (2026, 2036...)
+  const rInner = 45;
+  const rZodiac = 110;
+  const rHouse = 160;
+  const rStars = 208;
+  const rMansion = 250;
+  const rShensha = 295;
+  const rOuterYears = 330;
 
-  // 十二黃道地支與西方星座縮寫對照
+  // 果老星宗正宗黃道地支映射 (午宮居頂，子宮居底)
   const ZODIAC_SECTORS = [
-    { branch: '子', code: 'Aqu', sign: '水瓶', wuxing: '土', minDeg: 300, maxDeg: 330 },
-    { branch: '丑', code: 'Cap', sign: '摩羯', wuxing: '土', minDeg: 270, maxDeg: 300 },
-    { branch: '寅', code: 'Sag', sign: '射手', wuxing: '木', minDeg: 240, maxDeg: 270 },
-    { branch: '卯', code: 'Sco', sign: '天蠍', wuxing: '火', minDeg: 210, maxDeg: 240 },
-    { branch: '辰', code: 'Lib', sign: '天秤', wuxing: '金', minDeg: 180, maxDeg: 210 },
-    { branch: '巳', code: 'Vir', sign: '處女', wuxing: '水', minDeg: 150, maxDeg: 180 },
-    { branch: '午', code: 'Leo', sign: '獅子', wuxing: '日', minDeg: 120, maxDeg: 150 },
-    { branch: '未', code: 'Can', sign: '巨蟹', wuxing: '月', minDeg: 90, maxDeg: 120 },
-    { branch: '申', code: 'Gem', sign: '雙子', wuxing: '水', minDeg: 60, maxDeg: 90 },
-    { branch: '酉', code: 'Tau', sign: '金牛', wuxing: '金', minDeg: 30, maxDeg: 60 },
-    { branch: '戌', code: 'Ari', sign: '白羊', wuxing: '火', minDeg: 0, maxDeg: 30 },
-    { branch: '亥', code: 'Pis', sign: '雙魚', wuxing: '木', minDeg: 330, maxDeg: 360 },
+    { branch: '戌', code: 'Ari', sign: '白羊', minDeg: 0, maxDeg: 30 },
+    { branch: '酉', code: 'Tau', sign: '金牛', minDeg: 30, maxDeg: 60 },
+    { branch: '申', code: 'Gem', sign: '雙子', minDeg: 60, maxDeg: 90 },
+    { branch: '未', code: 'Can', sign: '巨蟹', minDeg: 90, maxDeg: 120 },
+    { branch: '午', code: 'Leo', sign: '獅子', minDeg: 120, maxDeg: 150 },
+    { branch: '巳', code: 'Vir', sign: '處女', minDeg: 150, maxDeg: 180 },
+    { branch: '辰', code: 'Lib', sign: '天秤', minDeg: 180, maxDeg: 210 },
+    { branch: '卯', code: 'Sco', sign: '天蠍', minDeg: 210, maxDeg: 240 },
+    { branch: '寅', code: 'Sag', sign: '射手', minDeg: 240, maxDeg: 270 },
+    { branch: '丑', code: 'Cap', sign: '摩羯', minDeg: 270, maxDeg: 300 },
+    { branch: '子', code: 'Aqu', sign: '水瓶', minDeg: 300, maxDeg: 330 },
+    { branch: '亥', code: 'Pis', sign: '雙魚', minDeg: 330, maxDeg: 360 },
   ];
 
-  // 星曜經典色彩
   const STAR_COLORS: Record<string, { fill: string; stroke: string; halo: string }> = {
     太陽: { fill: '#fbbf24', stroke: '#f59e0b', halo: 'rgba(251, 191, 36, 0.4)' },
     太陰: { fill: '#e0f2fe', stroke: '#38bdf8', halo: 'rgba(56, 189, 248, 0.4)' },
@@ -61,7 +58,6 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
     紫氣: { fill: '#a7f3d0', stroke: '#059669', halo: 'rgba(167, 243, 208, 0.4)' },
   };
 
-  // 靜態神煞庫 (按十二地支環狀排列)
   const SHENSHA_CIRCLES: Record<string, string[]> = {
     子: ['天德', '月德', '歲駕', '華蓋', '將星'],
     丑: ['天乙', '福星', '國印', '飛廉', '寡宿'],
@@ -77,16 +73,16 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
     亥: ['天乙', '貴人', '亡神', '貫索', '暴敗'],
   };
 
-  // 極座標轉換
-  const getCoords = (deg: number, radius: number) => {
-    const rad = ((deg - 90) * Math.PI) / 180;
+  // 核心幾何演算法：螢幕角度 = 405° - 黃道經度
+  const getCoords = (longitude: number, radius: number) => {
+    const screenAngleDeg = 405 - longitude;
+    const rad = (screenAngleDeg * Math.PI) / 180;
     return {
       x: center + radius * Math.cos(rad),
       y: center + radius * Math.sin(rad),
     };
   };
 
-  // 星曜重疊避讓計算
   const processedStars = data.stars.map((star, idx, arr) => {
     let currentR = rStars;
     for (let i = 0; i < idx; i++) {
@@ -112,11 +108,10 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
 
   return (
     <div className="relative flex flex-col items-center justify-center rounded-2xl border border-amber-500/30 bg-slate-950 p-4 shadow-2xl overflow-hidden selection:bg-amber-500/30">
-      {/* 頂部工具列 */}
       <div className="mb-3 flex w-full items-center justify-between px-2 text-xs">
         <div className="flex items-center gap-2 text-amber-300 font-bold">
           <Sparkles className="size-4 text-amber-400" />
-          <span>果老星宗 · 七政四餘多層渾天星盤</span>
+          <span>果老星宗 · 七政四餘渾天星盤</span>
         </div>
 
         <button
@@ -155,7 +150,7 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
             </filter>
           </defs>
 
-          {/* 1. 多重同心圓基底 (Concentric Rings) */}
+          {/* 1. 同心圓基底 */}
           <circle cx={center} cy={center} r={rOuterYears} stroke="url(#ringGold)" strokeWidth="1.5" fill="none" opacity="0.7" />
           <circle cx={center} cy={center} r={rShensha} stroke="#3b82f6" strokeWidth="1" strokeDasharray="2, 3" fill="none" opacity="0.4" />
           <circle cx={center} cy={center} r={rMansion} stroke="url(#ringGold)" strokeWidth="1" fill="none" opacity="0.6" />
@@ -164,21 +159,17 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
           <circle cx={center} cy={center} r={rZodiac} stroke="url(#ringGold)" strokeWidth="1" fill="none" opacity="0.5" />
           <circle cx={center} cy={center} r={rInner} stroke="url(#ringGold)" strokeWidth="1.5" fill="#020617" opacity="0.9" />
 
-          {/* 2. 第一環：地支、西方星座縮寫 (Aqu, Cap...) 與五行 */}
-          {ZODIAC_SECTORS.map((sector, idx) => {
-            const startDeg = idx * 30;
-            const midDeg = startDeg + 15;
-            const p1 = getCoords(startDeg, rInner);
-            const p2 = getCoords(startDeg, rOuterYears);
+          {/* 2. 第一環：十二地支與西方星座 */}
+          {ZODIAC_SECTORS.map((sector) => {
+            const midDeg = (sector.minDeg + sector.maxDeg) / 2;
+            const p1 = getCoords(sector.minDeg, rInner);
+            const p2 = getCoords(sector.minDeg, rOuterYears);
             const pos = getCoords(midDeg, (rInner + rZodiac) / 2);
             const isMing = sector.branch === mingBranch;
 
             return (
-              <g key={idx}>
-                {/* 輻射貫穿分割線 */}
+              <g key={sector.branch}>
                 <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="#78350f" strokeWidth="1" opacity="0.3" />
-
-                {/* 地支 + 星座代碼 */}
                 <text
                   x={pos.x}
                   y={pos.y - 6}
@@ -204,14 +195,15 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
             );
           })}
 
-          {/* 3. 第二環：後天十二宮名稱 (命宮, 財帛, 兄弟...) */}
-          {data.houses.map((house, idx) => {
-            const midDeg = idx * 30 + 15;
+          {/* 3. 第二環：後天十二宮名稱 */}
+          {data.houses.map((house) => {
+            const sector = ZODIAC_SECTORS.find(s => s.branch === house.branch.slice(0, 1)) || ZODIAC_SECTORS[0];
+            const midDeg = (sector.minDeg + sector.maxDeg) / 2;
             const pos = getCoords(midDeg, (rZodiac + rHouse) / 2);
             const isMing = house.branch.startsWith(mingBranch);
 
             return (
-              <g key={idx}>
+              <g key={house.name}>
                 {isMing && (
                   <circle cx={pos.x} cy={pos.y} r="16" fill="#f59e0b" opacity="0.25" />
                 )}
@@ -230,7 +222,7 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
             );
           })}
 
-          {/* 4. 第三環：今制二十八宿度數與宿名 (角, 亢, 氐, 房...) */}
+          {/* 4. 第三環：二十八宿 */}
           {data.mansions.map((m, idx) => {
             const pos = getCoords(m.startDeg + m.span / 2, (rHouse + rMansion) / 2);
             const line1 = getCoords(m.startDeg, rHouse);
@@ -254,11 +246,11 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
             );
           })}
 
-          {/* 5. 第四環：密集叢辰神煞細字環 */}
-          {ZODIAC_SECTORS.map((sector, idx) => {
+          {/* 5. 第四環：叢辰神煞環 */}
+          {ZODIAC_SECTORS.map((sector) => {
             const shenshas = SHENSHA_CIRCLES[sector.branch] || [];
             return shenshas.map((sName, sIdx) => {
-              const deg = idx * 30 + (sIdx + 1) * (30 / (shenshas.length + 1));
+              const deg = sector.minDeg + (sIdx + 1) * (30 / (shenshas.length + 1));
               const pos = getCoords(deg, (rMansion + rShensha) / 2);
               return (
                 <text
@@ -277,9 +269,9 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
             });
           })}
 
-          {/* 6. 第五最外環：大運流年歲數限度環 (2026, 2036, 2046...) */}
+          {/* 6. 第五最外環：流年年限 */}
           {ZODIAC_SECTORS.map((sector, idx) => {
-            const midDeg = idx * 30 + 15;
+            const midDeg = (sector.minDeg + sector.maxDeg) / 2;
             const pos = getCoords(midDeg, (rShensha + rOuterYears) / 2);
             const baseYear = 2026 + idx * 7;
 
@@ -299,7 +291,7 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
             );
           })}
 
-          {/* 7. 核心七政四餘星曜點位與放射虛線 */}
+          {/* 7. 核心七政四餘星曜 */}
           {processedStars.map((star) => {
             const style = STAR_COLORS[star.name] || { fill: '#e2e8f0', stroke: '#94a3b8', halo: 'rgba(226, 232, 240, 0.3)' };
             const lineToCenter = getCoords(star.longitude, rInner);
@@ -362,7 +354,7 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
             );
           })}
 
-          {/* 圓心：立命與立身 */}
+          {/* 圓心 */}
           <g transform={`translate(${center}, ${center})`}>
             <circle cx="0" cy="0" r="28" fill="#020617" stroke="url(#ringGold)" strokeWidth="1" />
             <text x="0" y="-5" textAnchor="middle" fill="#f59e0b" fontSize="10" fontWeight="bold">
@@ -374,13 +366,13 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
           </g>
         </svg>
 
-        {/* 左下角小限與歲數動態資訊框 (對應圖片左下角視窗) */}
+        {/* 左下角限度動態資訊框 */}
         <div className="absolute bottom-3 left-3 rounded-xl border border-amber-500/40 bg-slate-900/90 p-2.5 text-[11px] font-mono text-amber-200 backdrop-blur shadow-lg">
           <div className="font-bold text-amber-400">43歲 2026年 丙午(木)</div>
           <div className="text-slate-300 mt-0.5">小限:巳 宮 · 飛限:亥 宮</div>
         </div>
 
-        {/* Hover Tooltip 浮動提示框 */}
+        {/* Hover Tooltip */}
         {tooltip && (
           <div
             className="pointer-events-none absolute z-50 flex flex-col gap-1.5 rounded-xl border border-amber-500/40 bg-slate-900/95 p-3 text-xs text-slate-100 shadow-2xl backdrop-blur-md transition-all duration-75"
@@ -413,7 +405,6 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
         )}
       </div>
 
-      {/* 底部圖例 */}
       <div className="mt-3 flex flex-wrap items-center justify-center gap-4 text-[11px] text-slate-400">
         <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-amber-400" /> 太陽/土星</span>
         <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-sky-300" /> 太陰/月孛</span>
