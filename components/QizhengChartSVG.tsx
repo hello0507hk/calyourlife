@@ -28,7 +28,6 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
   const rShensha = 295;
   const rOuterYears = 330;
 
-  // 正宗果老星宗黃道十二宮 (午宮居正南頂部)
   const ZODIAC_SECTORS = [
     { branch: '戌', code: 'Ari', sign: '白羊', minDeg: 0, maxDeg: 30 },
     { branch: '酉', code: 'Tau', sign: '金牛', minDeg: 30, maxDeg: 60 },
@@ -58,22 +57,6 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
     紫氣: { fill: '#a7f3d0', stroke: '#059669', halo: 'rgba(167, 243, 208, 0.4)' },
   };
 
-  const SHENSHA_CIRCLES: Record<string, string[]> = {
-    子: ['天德', '月德', '歲駕', '華蓋', '將星'],
-    丑: ['天乙', '福星', '國印', '飛廉', '寡宿'],
-    寅: ['驛馬', '祿勳', '劫煞', '天廚', '孤辰'],
-    卯: ['桃花', '羊刃', '飛刃', '咸池', '勾神'],
-    辰: ['華蓋', '天羅', '喪門', '吊客', '破碎'],
-    巳: ['天德', '文昌', '天喜', '病符', '亡神'],
-    午: ['將星', '帝旺', '金輿', '白虎', '大耗'],
-    未: ['紅鸞', '天醫', '寡宿', '小耗', '勾絞'],
-    申: ['驛馬', '詞館', '地殺', '咸池', '劫殺'],
-    酉: ['桃花', '將星', '太歲', '伏屍', '劍鋒'],
-    戌: ['地網', '華蓋', '月空', '死符', '小耗'],
-    亥: ['天乙', '貴人', '亡神', '貫索', '暴敗'],
-  };
-
-  // 核心角座標變換 (螢幕角度 = 405° - 黃道經度)
   const getCoords = (longitude: number, radius: number) => {
     const screenAngleDeg = 405 - longitude;
     const rad = (screenAngleDeg * Math.PI) / 180;
@@ -83,7 +66,7 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
     };
   };
 
-  const processedStars = data.stars.map((star, idx, arr) => {
+  const processedStars = (data.stars || []).map((star, idx, arr) => {
     let currentR = rStars;
     for (let i = 0; i < idx; i++) {
       const diff = Math.abs(star.longitude - arr[i].longitude);
@@ -94,6 +77,8 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
     const coords = getCoords(star.longitude, currentR);
     return { ...star, x: coords.x, y: coords.y, r: currentR };
   });
+
+  const mingBranch = data.mingGong ? data.mingGong.slice(0, 1) : '辰';
 
   const handleMouseMove = (e: React.MouseEvent<SVGElement>, info: Omit<TooltipInfo, 'x' | 'y'>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -148,7 +133,7 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
             </filter>
           </defs>
 
-          {/* 1. 同心圓基底 */}
+          {/* 1. 同心圓 */}
           <circle cx={center} cy={center} r={rOuterYears} stroke="url(#ringGold)" strokeWidth="1.5" fill="none" opacity="0.7" />
           <circle cx={center} cy={center} r={rShensha} stroke="#3b82f6" strokeWidth="1" strokeDasharray="2, 3" fill="none" opacity="0.4" />
           <circle cx={center} cy={center} r={rMansion} stroke="url(#ringGold)" strokeWidth="1" fill="none" opacity="0.6" />
@@ -157,13 +142,13 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
           <circle cx={center} cy={center} r={rZodiac} stroke="url(#ringGold)" strokeWidth="1" fill="none" opacity="0.5" />
           <circle cx={center} cy={center} r={rInner} stroke="url(#ringGold)" strokeWidth="1.5" fill="#020617" opacity="0.9" />
 
-          {/* 2. 第一環：地支與星座 */}
+          {/* 2. 第一環：地支與黃道宮 */}
           {ZODIAC_SECTORS.map((sector) => {
             const midDeg = (sector.minDeg + sector.maxDeg) / 2;
             const p1 = getCoords(sector.minDeg, rInner);
             const p2 = getCoords(sector.minDeg, rOuterYears);
             const pos = getCoords(midDeg, (rInner + rZodiac) / 2);
-            const isMing = sector.branch === '辰';
+            const isMing = sector.branch === mingBranch;
 
             return (
               <g key={sector.branch}>
@@ -193,8 +178,8 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
             );
           })}
 
-          {/* 3. 第二環：後天十二宮名稱 */}
-          {data.houses.map((house) => {
+          {/* 3. 第二環：動態後天十二宮 */}
+          {(data.houses || []).map((house) => {
             const branchChar = house.branch.slice(0, 1);
             const sector = ZODIAC_SECTORS.find(s => s.branch === branchChar) || ZODIAC_SECTORS[0];
             const midDeg = (sector.minDeg + sector.maxDeg) / 2;
@@ -222,7 +207,7 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
           })}
 
           {/* 4. 第三環：今制二十八宿 */}
-          {data.mansions.map((m, idx) => {
+          {(data.mansions || []).map((m, idx) => {
             const pos = getCoords(m.startDeg + m.span / 2, (rHouse + rMansion) / 2);
             const line1 = getCoords(m.startDeg, rHouse);
             const line2 = getCoords(m.startDeg, rMansion);
@@ -245,52 +230,7 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
             );
           })}
 
-          {/* 5. 第四環：神煞環 */}
-          {ZODIAC_SECTORS.map((sector) => {
-            const shenshas = SHENSHA_CIRCLES[sector.branch] || [];
-            return shenshas.map((sName, sIdx) => {
-              const deg = sector.minDeg + (sIdx + 1) * (30 / (shenshas.length + 1));
-              const pos = getCoords(deg, (rMansion + rShensha) / 2);
-              return (
-                <text
-                  key={`${sector.branch}-${sIdx}`}
-                  x={pos.x}
-                  y={pos.y}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fill="#f472b6"
-                  fontSize="7.5"
-                  opacity="0.85"
-                >
-                  {sName}
-                </text>
-              );
-            });
-          })}
-
-          {/* 6. 第五最外環：流年年限 */}
-          {ZODIAC_SECTORS.map((sector, idx) => {
-            const midDeg = (sector.minDeg + sector.maxDeg) / 2;
-            const pos = getCoords(midDeg, (rShensha + rOuterYears) / 2);
-            const baseYear = 2026 + idx * 7;
-
-            return (
-              <text
-                key={idx}
-                x={pos.x}
-                y={pos.y}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fill="#38bdf8"
-                fontSize="8.5"
-                fontWeight="bold"
-              >
-                {baseYear}
-              </text>
-            );
-          })}
-
-          {/* 7. 七政四餘星曜點位 */}
+          {/* 5. 動態星曜點位 */}
           {processedStars.map((star) => {
             const style = STAR_COLORS[star.name] || { fill: '#e2e8f0', stroke: '#94a3b8', halo: 'rgba(226, 232, 240, 0.3)' };
             const lineToCenter = getCoords(star.longitude, rInner);
@@ -353,22 +293,22 @@ export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
             );
           })}
 
-          {/* 圓心 */}
+          {/* 6. 動態圓心命宮與身宮標籤 */}
           <g transform={`translate(${center}, ${center})`}>
-            <circle cx="0" cy="0" r="28" fill="#020617" stroke="url(#ringGold)" strokeWidth="1" />
-            <text x="0" y="-5" textAnchor="middle" fill="#f59e0b" fontSize="10" fontWeight="bold">
-              辰宮
+            <circle cx="0" cy="0" r="32" fill="#020617" stroke="url(#ringGold)" strokeWidth="1" />
+            <text x="0" y="-6" textAnchor="middle" fill="#f59e0b" fontSize="9.5" fontWeight="bold">
+              {data.mingGong ? data.mingGong.split(' ')[0] : '命宮'}
             </text>
-            <text x="0" y="9" textAnchor="middle" fill="#38bdf8" fontSize="8.5">
-              角木七度
+            <text x="0" y="8" textAnchor="middle" fill="#38bdf8" fontSize="8">
+              {data.shenGong ? data.shenGong.split(' ')[0] : '身宮'}
             </text>
           </g>
         </svg>
 
-        {/* 左下角小限與歲數動態資訊框 */}
+        {/* 左下角動態真太陽時與雙主資訊 */}
         <div className="absolute bottom-3 left-3 rounded-xl border border-amber-500/40 bg-slate-900/90 p-2.5 text-[11px] font-mono text-amber-200 backdrop-blur shadow-lg">
-          <div className="font-bold text-amber-400">43歲 2026年 丙午(木)</div>
-          <div className="text-slate-300 mt-0.5">小限:巳 宮 · 飛限:亥 宮</div>
+          <div className="font-bold text-amber-400">真太陽時: {data.trueSolarTime || '12:00'}</div>
+          <div className="text-slate-300 mt-0.5">命宮主: {data.mingGongZhu || '金星'} · 命度主: {data.mingDuZhu || '木星'}</div>
         </div>
 
         {/* Hover Tooltip */}

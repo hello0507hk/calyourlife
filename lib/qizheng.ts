@@ -1,16 +1,16 @@
 /**
- * 七政四餘高精度排盤模組 (lib/qizheng.ts)
- * 整合 Moira 果老星宗演算法，提供 app/page.tsx 所需之 calculateQizheng 與 QizhengChart 導出
+ * Moira 果老星宗七政四餘全動態排盤引擎 (lib/qizheng.ts)
+ * 體制：黃道回歸制 + 真太陽時 (TST) + J2000今制28宿 + 太陽過宮順數至卯止
  */
 
 export interface StarPosition {
     name: string;
     type: '政' | '餘';
-    longitude: number;
-    zodiac: string;
+    longitude: number;      // 黃道經度 (0° - 360°)
+    zodiac: string;         // 落宮地支與星座
     wuxing: '木' | '火' | '土' | '金' | '水';
-    mansion: string;
-    mansionDegree: number;
+    mansion: string;        // 今制二十八宿
+    mansionDegree: number;  // 宿內度數
     isRetrograde?: boolean;
   }
   
@@ -30,15 +30,16 @@ export interface StarPosition {
     stars: StarPosition[];
     houses: QizhengHouse[];
     mansions: { name: string; startDeg: number; span: number; wuxing: string }[];
-    trueSolarTime?: string;
-    mingGongZhu?: string;
-    mingDuZhu?: string;
-    mingDuMansion?: string;
-    mingDuDegree?: number;
+    trueSolarTime: string;
+    mingGongZhu: string;
+    mingDuZhu: string;
+    mingDuMansion: string;
+    mingDuDegree: number;
   }
   
   const BRANCHES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
   
+  // Moira 黃道十二宮對照 (0°為戌宮/白羊座起點)
   const ZODIAC_SECTORS = [
     { branch: '戌', sign: '白羊座', wuxing: '火' as const, minDeg: 0, maxDeg: 30, ruler: '火星' },
     { branch: '酉', sign: '金牛座', wuxing: '金' as const, minDeg: 30, maxDeg: 60, ruler: '金星' },
@@ -54,6 +55,7 @@ export interface StarPosition {
     { branch: '亥', sign: '雙魚座', wuxing: '木' as const, minDeg: 330, maxDeg: 360, ruler: '木星' },
   ];
   
+  // Moira 今制 28 星宿基準分度 (J2000)
   const BASE_28_MANSIONS = [
     { name: '角木蛟', baseDeg: 201.0, span: 12.1, wuxing: '木' as const, ruler: '木星' },
     { name: '亢金龍', baseDeg: 213.1, span: 9.3, wuxing: '金' as const, ruler: '金星' },
@@ -85,28 +87,19 @@ export interface StarPosition {
     { name: '軫水蚓', baseDeg: 191.8, span: 9.2, wuxing: '水' as const, ruler: '水星' },
   ];
   
-  const HOUSE_ORDER_MAP: Record<string, string> = {
-    辰: '命宮',
-    卯: '財帛宮',
-    寅: '兄弟宮',
-    丑: '田宅宮',
-    子: '男女宮',
-    亥: '奴僕宮',
-    戌: '夫妻宮',
-    酉: '疾厄宮',
-    申: '遷移宮',
-    未: '官祿宮',
-    午: '福德宮',
-    巳: '父母宮',
-  };
+  const GUOLAO_HOUSES = ['命宮', '財帛宮', '兄弟宮', '田宅宮', '男女宮', '奴僕宮', '夫妻宮', '疾厄宮', '遷移宮', '官祿宮', '福德宮', '父母宮'];
   
   function normalizeDeg(deg: number): number {
     let d = deg % 360;
     return d < 0 ? d + 360 : d;
   }
   
-  function getJulianDay(year: number, month: number, day: number, hour: number, longitude: number): number {
-    const utcHour = hour - longitude / 15.0;
+  function sinD(deg: number) { return Math.sin((deg * Math.PI) / 180); }
+  function cosD(deg: number) { return Math.cos((deg * Math.PI) / 180); }
+  function atan2D(y: number, x: number) { return normalizeDeg((Math.atan2(y, x) * 180) / Math.PI); }
+  
+  function getJulianDay(year: number, month: number, day: number, hour: number, minute: number, longitude: number): number {
+    const utcHour = hour + minute / 60.0 - longitude / 15.0;
     let y = year;
     let m = month;
     if (m <= 2) { y -= 1; m += 12; }
@@ -115,35 +108,79 @@ export interface StarPosition {
     return Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + day + (utcHour + 0.5) / 24.0 + B - 1524.5;
   }
   
+  /**
+   * 核心動態計算入口：接收真實 Form 輸入參數
+   */
   export function calculateQizheng(
     birthYear: number,
     birthMonth: number,
     birthDay: number,
-    birthHour: number,
-    longitude: number = 114.17,
-    latitude: number = 22.28
+    birthHour: number = 12,
+    birthMinute: number = 0,
+    longitude: number = 114.17
   ): QizhengChart {
-    const jd = getJulianDay(birthYear, birthMonth, birthDay, birthHour, longitude);
-    const T = (jd - 2451545.0) / 36525.0;
+    // 1. 真太陽時校正 (TST)
+    const lonDiffMin = (longitude - 120.0) * 4.0;
+    const N = Math.floor(275 * birthMonth / 9) - Math.floor((birthMonth + 9) / 12) * (1 + Math.floor((birthYear - 4 * Math.floor(birthYear / 4) + 2) / 3)) + birthDay - 30;
+    const B = (360 / 365) * (N - 81) * (Math.PI / 180);
+    const eotMin = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);
   
-    const sunLong = normalizeDeg(240.5);   // 太陽：寅宮 (射手座 0.5°)
-    const moonLong = normalizeDeg(108.2);  // 太陰：未宮 (巨蟹座 18.2°)
-    const venusLong = normalizeDeg(197.2); // 金星：辰宮 (天秤座 17.2°)
-    const marsLong = normalizeDeg(194.8);  // 火星：辰宮 (天秤座 14.8°)
-    const jupiterLong = normalizeDeg(258.5);// 木星：寅宮 (射手座 18.5°)
-    const saturnLong = normalizeDeg(219.1); // 土星：卯宮 (天蠍座 9.1°)
-    const mercuryLong = normalizeDeg(252.0);// 水星：寅宮 (射手座 12.0°)
-    const rahuLong = normalizeDeg(73.5);   // 羅睺：申宮
-    const ketuLong = normalizeDeg(253.5);  // 計都：寅宮
-    const yuebeiLong = normalizeDeg(132.8); // 月孛：午宮
-    const ziqiLong = normalizeDeg(312.4);  // 紫氣：子宮
+    let totalMinutes = birthHour * 60 + birthMinute + lonDiffMin + eotMin;
+    if (totalMinutes < 0) totalMinutes += 1440;
+    totalMinutes %= 1440;
   
+    const tstHour = Math.floor(totalMinutes / 60);
+    const tstMinute = Math.floor(totalMinutes % 60);
+    const hourBranchIdx = Math.floor((tstHour + 1) / 2) % 12;
+  
+    // 2. 儒略日與世紀數
+    const jd = getJulianDay(birthYear, birthMonth, birthDay, birthHour, birthMinute, longitude);
+    const d = jd - 2451545.0;
+    const T = d / 36525.0;
+  
+    // 3. 行星黃道軌道演算法 (開普勒幾何)
+    const L0 = normalizeDeg(280.46646 + 36000.76983 * T);
+    const M_sun = normalizeDeg(357.52911 + 35999.05029 * T);
+    const C_sun = (1.914602 - 0.004817 * T) * sinD(M_sun) + (0.019993 - 0.000101 * T) * sinD(2 * M_sun);
+    const sunLong = normalizeDeg(L0 + C_sun);
+  
+    const L_moon = normalizeDeg(218.3165 + 481267.8813 * T);
+    const M_moon = normalizeDeg(134.9634 + 477198.8675 * T);
+    const D_moon = normalizeDeg(297.8502 + 445267.1115 * T);
+    const moonLong = normalizeDeg(L_moon + 6.2886 * sinD(M_moon) + 1.274 * sinD(2 * D_moon - M_moon));
+  
+    const M_merc = normalizeDeg(174.7948 + 149472.6741 * T);
+    const mercuryLong = normalizeDeg(sunLong + 22.4 * sinD(M_merc) + 2.5 * sinD(2 * M_merc));
+  
+    const M_ven = normalizeDeg(50.4161 + 58517.8156 * T);
+    const venHelio = normalizeDeg(181.9798 + 58517.8156 * T + 0.77 * sinD(M_ven));
+    const venusLong = normalizeDeg(atan2D(0.72333 * sinD(venHelio) - sinD(sunLong), 0.72333 * cosD(venHelio) - cosD(sunLong)));
+  
+    const M_mars = normalizeDeg(19.3730 + 19139.9680 * T);
+    const marsHelio = normalizeDeg(355.4330 + 19140.2993 * T + 10.69 * sinD(M_mars));
+    const marsLong = normalizeDeg(atan2D(1.52368 * sinD(marsHelio) - sinD(sunLong), 1.52368 * cosD(marsHelio) - cosD(sunLong)));
+  
+    const M_jup = normalizeDeg(20.0202 + 3034.6920 * T);
+    const jupHelio = normalizeDeg(34.3515 + 3034.9057 * T + 5.55 * sinD(M_jup));
+    const jupiterLong = normalizeDeg(atan2D(5.2026 * sinD(jupHelio) - sinD(sunLong), 5.2026 * cosD(jupHelio) - cosD(sunLong)));
+  
+    const M_sat = normalizeDeg(317.0207 + 1222.1138 * T);
+    const satHelio = normalizeDeg(50.0774 + 1222.1138 * T + 6.35 * sinD(M_sat));
+    const saturnLong = normalizeDeg(atan2D(9.5549 * sinD(satHelio) - sinD(sunLong), 9.5549 * cosD(satHelio) - cosD(sunLong)));
+  
+    const rahuLong = normalizeDeg(125.04452 - 1934.136261 * T);
+    const ketuLong = normalizeDeg(rahuLong + 180);
+    const yuebeiLong = normalizeDeg(83.35324 + 4069.0137 * T);
+    const ziqiLong = normalizeDeg(169.60 + 12.857 * ((jd - 2415020.5) / 365.25));
+  
+    // 4. 今制 28 星宿歲差校正
     const precession = 1.396 * T;
     const modernMansions = BASE_28_MANSIONS.map(m => ({
       name: m.name,
       startDeg: normalizeDeg(m.baseDeg + precession),
       span: m.span,
       wuxing: m.wuxing,
+      ruler: m.ruler,
     }));
   
     const starRaw = [
@@ -176,15 +213,34 @@ export interface StarPosition {
       };
     });
   
-    const mingBranch = '辰';
-    const moonSector = ZODIAC_SECTORS.find(z => moonLong >= z.minDeg && moonLong < z.maxDeg) || ZODIAC_SECTORS[0];
-    const shenBranch = moonSector.branch;
+    // 5. Moira 果老星宗立命法："太陽加生時，順數逢卯止"
+    const sunSector = ZODIAC_SECTORS.find(s => sunLong >= s.minDeg && sunLong < s.maxDeg) || ZODIAC_SECTORS[0];
+    const sunBranchIdx = BRANCHES.indexOf(sunSector.branch);
+    const sunOffsetInSector = sunLong - sunSector.minDeg;
   
-    const branches = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
+    // 順數至卯時 (卯=3) 步數
+    const stepsToMao = (3 - hourBranchIdx + 12) % 12;
+    const mingBranchIdx = (sunBranchIdx + stepsToMao) % 12;
+    const mingBranch = BRANCHES[mingBranchIdx];
+    const mingSector = ZODIAC_SECTORS.find(s => s.branch === mingBranch)!;
   
-    const houses: QizhengHouse[] = branches.map(branch => {
-      const sector = ZODIAC_SECTORS.find(z => z.branch === branch)!;
-      const hName = HOUSE_ORDER_MAP[branch] || '命宮';
+    // Moira 命度：命宮經度起點 + 太陽宮內餘度
+    const exactMingLong = normalizeDeg(mingSector.minDeg + sunOffsetInSector);
+    const mingMansion = modernMansions.find(m => normalizeDeg(exactMingLong - m.startDeg) < m.span) || modernMansions[0];
+    const mingDuDegree = Number(normalizeDeg(exactMingLong - mingMansion.startDeg).toFixed(1));
+  
+    // 6. 身宮 (太陰落宮)
+    const moonSector = ZODIAC_SECTORS.find(s => moonLong >= s.minDeg && moonLong < s.maxDeg) || ZODIAC_SECTORS[0];
+    const moonMansion = modernMansions.find(m => normalizeDeg(moonLong - m.startDeg) < m.span) || modernMansions[0];
+  
+    // 7. 後天十二宮逆排 (以命宮為首)
+    const branchesOrder = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
+    const mingIdxInBranch = branchesOrder.indexOf(mingBranch);
+  
+    const houses: QizhengHouse[] = GUOLAO_HOUSES.map((hName, idx) => {
+      const bIdx = (mingIdxInBranch - idx + 12) % 12;
+      const branch = branchesOrder[bIdx];
+      const sector = ZODIAC_SECTORS.find(s => s.branch === branch)!;
       const starsInHouse = stars.filter(s => s.zodiac.startsWith(branch)).map(s => s.name);
   
       return {
@@ -199,14 +255,15 @@ export interface StarPosition {
   
     return {
       julianDay: Number(jd.toFixed(4)),
-      mingGong: '辰宮 (立命角木七度)',
-      shenGong: `${shenBranch}宮 (立身井木宿)`,
+      mingGong: `${mingBranch}宮 (立命${mingMansion.name.slice(0, 2)}${mingDuDegree}度)`,
+      shenGong: `${moonSector.branch}宮 (立身${moonMansion.name.slice(0, 2)}宿)`,
       stars,
       houses,
       mansions: modernMansions,
-      mingGongZhu: '金星',
-      mingDuZhu: '木星',
-      mingDuMansion: '角木蛟',
-      mingDuDegree: 7.2,
+      trueSolarTime: `${String(tstHour).padStart(2, '0')}:${String(tstMinute).padStart(2, '0')}`,
+      mingGongZhu: mingSector.ruler,
+      mingDuZhu: mingMansion.ruler,
+      mingDuMansion: mingMansion.name,
+      mingDuDegree,
     };
   }
