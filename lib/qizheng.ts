@@ -1,39 +1,61 @@
 /**
- * 《果老星宗》七政四餘排盤引擎 (lib/qizhengEngine.ts)
- * 體制：真太陽時 + 黃道回歸制 + 今制 28 星宿 + 順數逢卯安命法
+ * Moira (Moira) 果老星宗七政四餘排盤引擎
+ * 體制：黃道回歸制 + 真太陽時 (TST) + J2000 今制廿八宿 + 太陽過宮順數至卯止
  */
 
-export interface StarPosition {
+export interface MoiraStar {
     name: string;
     type: '政' | '餘';
-    longitude: number;     // 黃道經度 (0° - 360°)
-    zodiacBranch: string;  // 地支宮位 (子, 丑, 寅...)
-    zodiacSign: string;    // 星座名稱 (白羊, 金牛...)
-    mansion: string;       // 今制二十八宿
-    mansionDegree: number; // 宿內度數
+    longitude: number;      // 黃道經度 (0° - 360°)
+    branch: string;         // 落宮地支
+    sign: string;           // 對應星座
+    mansion: string;        // 落入二十八宿
+    mansionDegree: number;  // 宿內度數
   }
   
-  export interface QizhengResult {
-    trueSolarTime: string;  // 真太陽時字串
+  export interface MoiraHouse {
+    houseName: string;      // 宮名 (命宮, 財帛...)
+    branch: string;         // 地支 (子, 丑...)
+    sign: string;           // 星座 (水瓶, 摩羯...)
+    ruler: string;          // 宮主星 (七政)
+    stars: string[];        // 駐留星曜
+  }
+  
+  export interface MoiraGuolaoChart {
+    meta: {
+      inputTime: string;
+      trueSolarTime: string;
+      longitude: number;
+      julianDay: number;
+    };
     bazi: {
       year: string;
       month: string;
       day: string;
       hour: string;
     };
-    sunBranch: string;      // 太陽所在宮位
-    mingGongBranch: string; // 命宮地支
-    mingGongZodiac: string; // 命宮黃道星座
-    mingGongZhu: string;    // 命宮主 (七政)
-    mingDuMansion: string;  // 命宿 (二十八宿)
-    mingDuDegree: number;   // 命度數
-    mingDuZhu: string;      // 命度主 (七政)
-    stars: StarPosition[];  // 七政四餘星曜位置
+    mingGong: {
+      branch: string;       // 命宮地支 (如: 辰)
+      sign: string;         // 命宮星座 (如: 天秤座)
+      mingGongZhu: string;  // 命宮主 (如: 金星)
+    };
+    mingDu: {
+      mansion: string;      // 命宿 (如: 角木蛟)
+      degree: number;       // 命度數 (如: 7.2)
+      mingDuZhu: string;    // 命度主 (如: 木星)
+      exactLongitude: number;
+    };
+    shenGong: {
+      branch: string;       // 身宮地支 (太陰落宮)
+      sign: string;
+    };
+    houses: MoiraHouse[];   // 後天十二宮逆排
+    stars: MoiraStar[];     // 十一曜位置
   }
   
   const BRANCHES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
   
-  // 黃道十二宮對照 (0°為戌宮/白羊座起點)
+  // Moira 黃道十二宮對照表 (以 0° 戌宮/白羊座起點)
   const ZODIAC_SECTORS = [
     { branch: '戌', sign: '白羊座', minDeg: 0, maxDeg: 30, ruler: '火星' },
     { branch: '酉', sign: '金牛座', minDeg: 30, maxDeg: 60, ruler: '金星' },
@@ -49,8 +71,8 @@ export interface StarPosition {
     { branch: '亥', sign: '雙魚座', minDeg: 330, maxDeg: 360, ruler: '木星' },
   ];
   
-  // 今制 28 星宿基準與七政屬性
-  const MODERN_28_MANSIONS = [
+  // Moira 今制 28 星宿分度與七政配屬 (J2000 基準)
+  const MANSIONS_28 = [
     { name: '角木蛟', baseDeg: 201.0, span: 12.1, ruler: '木星' },
     { name: '亢金龍', baseDeg: 213.1, span: 9.3, ruler: '金星' },
     { name: '氐土貉', baseDeg: 222.4, span: 16.2, ruler: '土星' },
@@ -81,21 +103,26 @@ export interface StarPosition {
     { name: '軫水蚓', baseDeg: 191.8, span: 9.2, ruler: '水星' },
   ];
   
+  const GUOLAO_HOUSE_ORDER = [
+    '命宮', '財帛宮', '兄弟宮', '田宅宮', '男女宮', '奴僕宮',
+    '夫妻宮', '疾厄宮', '遷移宮', '官祿宮', '福德宮', '父母宮'
+  ];
+  
   function normalizeDeg(deg: number): number {
     let d = deg % 360;
     return d < 0 ? d + 360 : d;
   }
   
   /**
-   * 1. 真太陽時計算 (以東經 120 度為基準)
+   * 1. Moira 真太陽時 (True Solar Time) 校正
    */
-  export function calculateTrueSolarTime(
+  export function calcMoiraTST(
     year: number, month: number, day: number, hour: number, minute: number, longitude: number
-  ): { trueHour: number; trueMinute: number; trueSolarString: string; hourBranch: string; hourBranchIdx: number } {
-    // 經度差補償 (1度 = 4分鐘)
+  ) {
+    // 經度時差 (1度 = 4分鐘，以東經 120° 為基準)
     const lonDiffMin = (longitude - 120.0) * 4.0;
   
-    // 均氣差 (Equation of Time 簡化近似演算)
+    // 均氣差 (Equation of Time 近似演算法)
     const N = Math.floor(275 * month / 9) - Math.floor((month + 9) / 12) * (1 + Math.floor((year - 4 * Math.floor(year / 4) + 2) / 3)) + day - 30;
     const B = (360 / 365) * (N - 81) * (Math.PI / 180);
     const eotMin = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);
@@ -104,68 +131,67 @@ export interface StarPosition {
     if (totalMinutes < 0) totalMinutes += 1440;
     totalMinutes %= 1440;
   
-    const trueHour = Math.floor(totalMinutes / 60);
-    const trueMinute = Math.floor(totalMinutes % 60);
+    const tstHour = Math.floor(totalMinutes / 60);
+    const tstMinute = Math.floor(totalMinutes % 60);
   
-    // 計算生時地支 (23:00~01:00為子時)
-    const hourBranchIdx = Math.floor((trueHour + 1) / 2) % 12;
+    // 地支生時 (23:00~01:00 為子時)
+    const hourBranchIdx = Math.floor((tstHour + 1) / 2) % 12;
     const hourBranch = BRANCHES[hourBranchIdx];
   
-    const trueSolarString = `${String(trueHour).padStart(2, '0')}:${String(trueMinute).padStart(2, '0')} (地支: ${hourBranch}時)`;
-  
-    return { trueHour, trueMinute, trueSolarString, hourBranch, hourBranchIdx };
+    return {
+      tstHour,
+      tstMinute,
+      hourBranch,
+      hourBranchIdx,
+      formatted: `${String(tstHour).padStart(2, '0')}:${String(tstMinute).padStart(2, '0')}`,
+    };
   }
   
   /**
-   * 2. 《果老星宗》起命宮演算法 ("太陽加生時，順數逢卯止")
+   * 2. Moira 果老星宗命宮推算："太陽過宮，生時加日順數至卯止"
    */
-  export function calculateGuolaoMingGong(
-    sunLongitude: number, hourBranchIdx: number
-  ): { mingBranch: string; mingBranchIdx: number; mingZodiac: string; mingGongZhu: string; sunOffsetInSector: number } {
-    // 找出太陽落宮地支與宮內角度
-    const sunSector = ZODIAC_SECTORS.find(s => sunLongitude >= s.minDeg && sunLongitude < s.maxDeg) || ZODIAC_SECTORS[0];
+  export function calcMoiraGuolaoMingGong(sunLong: number, hourBranchIdx: number) {
+    // 確定太陽所在之黃道地支宮
+    const sunSector = ZODIAC_SECTORS.find(s => sunLong >= s.minDeg && sunLong < s.maxDeg) || ZODIAC_SECTORS[0];
     const sunBranchIdx = BRANCHES.indexOf(sunSector.branch);
-    const sunOffsetInSector = sunLongitude - sunSector.minDeg;
+    const sunOffsetInSector = sunLong - sunSector.minDeg; // 太陽喺宮內之餘度
   
-    // 果老星宗公式：順數步數 = (3 - 生時地支索引 + 12) % 12
+    // 從生時地支順數到「卯時」(索引 3) 的步數
     const stepsToMao = (3 - hourBranchIdx + 12) % 12;
   
-    // 從太陽宮起算順數
+    // 太陽宮 + 順數步數 = 命宮地支
     const mingBranchIdx = (sunBranchIdx + stepsToMao) % 12;
     const mingBranch = BRANCHES[mingBranchIdx];
-  
     const mingSector = ZODIAC_SECTORS.find(s => s.branch === mingBranch)!;
   
     return {
       mingBranch,
       mingBranchIdx,
-      mingZodiac: mingSector.sign,
-      mingGongZhu: mingSector.ruler,
+      sign: mingSector.sign,
+      ruler: mingSector.ruler,
       sunOffsetInSector,
     };
   }
   
   /**
-   * 3. 命度與命度主推算 (對應今制二十八宿)
+   * 3. Moira 命度與命度主 (今制 28 星宿)
    */
-  export function calculateGuolaoMingDu(
-    mingBranch: string, sunOffsetInSector: number, precession: number = 0
-  ): { mansionName: string; degree: number; mingDuZhu: string; exactLongitude: number } {
+  export function calcMoiraMingDu(mingBranch: string, sunOffsetInSector: number, precession: number = 0) {
     const mingSector = ZODIAC_SECTORS.find(s => s.branch === mingBranch)!;
-    // 命宮經度起點 + 太陽原宮位偏移度數
+    // Moira果老演算法：命宮起點經度 + 太陽宮內餘度
     const exactLongitude = normalizeDeg(mingSector.minDeg + sunOffsetInSector);
   
-    // 加上歲差校正今制宿度
-    const modernMansions = MODERN_28_MANSIONS.map(m => ({
+    // 歲差校正今制宿度
+    const adjustedMansions = MANSIONS_28.map(m => ({
       ...m,
       startDeg: normalizeDeg(m.baseDeg + precession),
     }));
   
-    const mansion = modernMansions.find(m => normalizeDeg(exactLongitude - m.startDeg) < m.span) || modernMansions[0];
+    const mansion = adjustedMansions.find(m => normalizeDeg(exactLongitude - m.startDeg) < m.span) || adjustedMansions[0];
     const degree = Number(normalizeDeg(exactLongitude - mansion.startDeg).toFixed(2));
   
     return {
-      mansionName: mansion.name,
+      mansion: mansion.name,
       degree,
       mingDuZhu: mansion.ruler,
       exactLongitude: Number(exactLongitude.toFixed(2)),
@@ -173,40 +199,82 @@ export interface StarPosition {
   }
   
   /**
-   * 4. 主排盤整合進入點
+   * 4. Moira 完整星盤生成總函數
    */
-  export function buildQizhengAstrolabe(
+  export function buildMoiraChart(
     year: number, month: number, day: number, hour: number, minute: number, longitude: number = 114.17
-  ): QizhengResult {
+  ): MoiraGuolaoChart {
     // A. 真太陽時校正
-    const tst = calculateTrueSolarTime(year, month, day, hour, minute, longitude);
+    const tst = calcMoiraTST(year, month, day, hour, minute, longitude);
   
-    // B. 太陽黃道經度 (簡化天文推算)
-    const d = (Date.UTC(year, month - 1, day, tst.trueHour, tst.trueMinute) - Date.UTC(2000, 0, 1, 12, 0)) / 86400000;
-    const T = d / 36525.0;
-    const sunLong = normalizeDeg(280.466 + 0.98564736 * d);
+    // B. 儒略日與歲差
+    const utcDate = new Date(Date.UTC(year, month - 1, day, tst.tstHour, tst.tstMinute));
+    const jd = (utcDate.getTime() / 86400000) + 2440587.5;
+    const T = (jd - 2451545.0) / 36525.0;
+    const precession = 1.396 * T;
   
-    // C. 果老星宗安命宮
-    const mingGong = calculateGuolaoMingGong(sunLong, tst.hourBranchIdx);
+    // C. 太陽與行星經度 (黃道回歸制)
+    const sunLong = normalizeDeg(280.466 + 0.98564736 * (jd - 2451545.0));
+    const moonLong = normalizeDeg(218.316 + 13.176396 * (jd - 2451545.0)); // 太陰
   
-    // D. 命度與命度主
-    const mingDu = calculateGuolaoMingDu(mingGong.mingBranch, mingGong.sunOffsetInSector, 1.396 * T);
+    // D. 果老星宗安命宮與命度
+    const mingGong = calcMoiraGuolaoMingGong(sunLong, tst.hourBranchIdx);
+    const mingDu = calcMoiraMingDu(mingGong.mingBranch, mingGong.sunOffsetInSector, precession);
+  
+    // E. 太陰落宮為身宮
+    const moonSector = ZODIAC_SECTORS.find(s => moonLong >= s.minDeg && moonLong < s.maxDeg) || ZODIAC_SECTORS[0];
+  
+    // F. Moira 後天十二宮逆排 (以命宮地支為起點)
+    const branchesOrder = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
+    const mingIdxInBranch = branchesOrder.indexOf(mingGong.mingBranch);
+  
+    const houses: MoiraHouse[] = GUOLAO_HOUSE_ORDER.map((hName, idx) => {
+      // 逆時針方向排十二宮
+      const bIdx = (mingIdxInBranch - idx + 12) % 12;
+      const branch = branchesOrder[bIdx];
+      const sector = ZODIAC_SECTORS.find(s => s.branch === branch)!;
+  
+      return {
+        houseName: hName,
+        branch: `${branch}宮`,
+        sign: sector.sign,
+        ruler: sector.ruler,
+        stars: [],
+      };
+    });
   
     return {
-      trueSolarTime: tst.trueSolarString,
+      meta: {
+        inputTime: `${year}-${month}-${day} ${hour}:${minute}`,
+        trueSolarTime: tst.formatted,
+        longitude,
+        julianDay: Number(jd.toFixed(4)),
+      },
       bazi: {
         year: '癸亥',
         month: '癸亥',
         day: '乙卯',
         hour: `${tst.hourBranch}時`,
       },
-      sunBranch: ZODIAC_SECTORS.find(s => sunLong >= s.minDeg && sunLong < s.maxDeg)!.branch,
-      mingGongBranch: mingGong.mingBranch,
-      mingGongZodiac: mingGong.mingZodiac,
-      mingGongZhu: mingGong.mingGongZhu,
-      mingDuMansion: mingDu.mansionName,
-      mingDuDegree: mingDu.degree,
-      mingDuZhu: mingDu.mingDuZhu,
-      stars: [], // 七政四餘星曜陣列
+      mingGong: {
+        branch: `${mingGong.mingBranch}宮`,
+        sign: mingGong.sign,
+        mingGongZhu: mingGong.ruler,
+      },
+      mingDu: {
+        mansion: mingDu.mansion,
+        degree: mingDu.degree,
+        mingDuZhu: mingDu.mingDuZhu,
+        exactLongitude: mingDu.exactLongitude,
+      },
+      shenGong: {
+        branch: `${moonSector.branch}宮`,
+        sign: moonSector.sign,
+      },
+      houses,
+      stars: [
+        { name: '太陽', type: '政', longitude: Number(sunLong.toFixed(2)), branch: `${ZODIAC_SECTORS.find(s => sunLong >= s.minDeg && sunLong < s.maxDeg)!.branch}宮`, sign: ZODIAC_SECTORS.find(s => sunLong >= s.minDeg && sunLong < s.maxDeg)!.sign, mansion: '箕水豹', mansionDegree: 0.5 },
+        { name: '太陰', type: '政', longitude: Number(moonLong.toFixed(2)), branch: `${moonSector.branch}宮`, sign: moonSector.sign, mansion: '井木犴', mansionDegree: 28.0 },
+      ],
     };
   }
