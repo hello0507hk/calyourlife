@@ -112,16 +112,23 @@ function buildBaziText(baziData: any, userNotes?: string) {
   let qizhengText = '【七政四餘星盤數據】：未提供額外星盤資料，請以經典子平八字進行推算。';
   if (qizhengData) {
     const starsText = qizhengData.stars
-      ? qizhengData.stars.map((s: any) => `  * ${s.name}：落 ${s.zodiac}（宿度：${s.mansion || '未定'} ${s.degree ? s.degree + '°' : ''}）`).join('\n')
+      ? qizhengData.stars
+          .map((s: any) => {
+            const extra = [s.state, ...(s.dignity || []), ...(s.huaYao || [])].filter(Boolean).join('、');
+            return `  * ${s.key}（${s.name}）：${s.branch}宮 ${s.degreeInSign}，${s.mansion}宿 ${s.mansionDegree}，落${s.house}${extra ? `（${extra}）` : ''}`;
+          })
+          .join('\n')
       : '無星曜數據';
 
     const housesText = qizhengData.houses
-      ? qizhengData.houses.map((h: any) => `  * ${h.name} (${h.zodiac})：${(h.stars && h.stars.length > 0) ? h.stars.join('、') : '無主星/餘星'}`).join('\n')
+      ? qizhengData.houses
+          .map((h: any) => `  * ${h.name}（${h.branch}宮・${h.zodiacSign}・宮主${h.ruler}）：${h.stars?.length ? h.stars.join('、') : '空宮'}${h.shensha?.length ? `；神煞：${h.shensha.join(' ')}` : ''}`)
+          .join('\n')
       : '無宮位數據';
 
     qizhengText = `
 【七政四餘星盤數據（星平合參對照）】：
-- 命宮：${qizhengData.mingGong || '未定'} | 身宮：${qizhengData.shenGong || '未定'}
+- 命宮：${qizhengData.mingGong || '未定'}宮（命度 ${qizhengData.ming?.mansion ?? ''} ${qizhengData.ming?.mansionDegree ?? ''}，命主 ${qizhengData.ming?.palaceRuler ?? ''}，度主 ${qizhengData.ming?.degreeRuler ?? ''}） | 身宮：${qizhengData.shenGong || '未定'}宮
 - 七政四餘星曜落宮：
 ${starsText}
 - 十二宮位星曜佈局（官祿、財帛、夫妻、疾厄等）：
@@ -164,6 +171,37 @@ ${dayyun
   .map((d: any) => `- ${d.ganZhi} 大運：${d.age}${d.endAge ? `–${d.endAge}` : ''}歲${d.startYear ? `（${d.startYear}–${d.endYear}年）` : ''}`)
   .join('\n')}
   `.trim();
+}
+
+const MONTH_LABELS = ['寅月', '卯月', '辰月', '巳月', '午月', '未月', '申月', '酉月', '戌月', '亥月', '子月', '丑月'];
+
+// 前端據此 JSON 繪製評分圖表；分數 0–100，50 為平
+function scoreBlockSpec(type: string, dayyun: any[] = []) {
+  let shape: string;
+  if (type === 'yearly') {
+    shape = JSON.stringify({
+      overall: 0,
+      summary: '一句話總評（30字內）',
+      scores: { 事業: 0, 財運: 0, 感情: 0, 健康: 0, 人際: 0, 學業: 0 },
+      months: MONTH_LABELS.map((month) => ({ month, score: 0, note: '8字內重點' })),
+    });
+  } else if (type === 'yearly_qa') {
+    shape = JSON.stringify({ score: 0, verdict: '吉／小吉／平／小凶／凶 擇一', summary: '一句話直接回答（30字內）' });
+  } else {
+    shape = JSON.stringify({
+      summary: '一句話總評（30字內）',
+      useGod: '用神（如：丙火）',
+      favorable: ['喜用五行，單字如 火'],
+      unfavorable: ['忌神五行，單字如 水'],
+      scores: { 事業: 0, 財運: 0, 感情: 0, 健康: 0, 學業: 0, 人際: 0 },
+      luck: dayyun.map((d: any) => ({ ganZhi: d.ganZhi, score: 0 })),
+    });
+  }
+  return `
+
+【圖表評分輸出要求（必須遵守）】：
+報告正文完成後，在最末尾另起一行，輸出一個以 \`\`\`json 開頭、\`\`\` 結尾的程式碼區塊，內容為以下結構的 JSON（只替換數值與文字，鍵名不可更改，分數為 0–100 整數，50 為平、越高越吉），區塊前後不要加任何解說：
+${shape}`;
 }
 
 // API Route 主入口
@@ -301,6 +339,9 @@ ${ADMIN_REFERENCE_DOCS}
 
       userPromptText = `請幫我分析以下八字與七政四餘命盤數據，進行【原局深度解盤】：\n\n${formattedText}`;
     }
+
+    const scoreSpec = scoreBlockSpec(type, baziData?.dayyun);
+    initialSystemPrompt += scoreSpec;
 
     // ==================================================================
     // 第一階段：DeepSeek + Qwen + Grok 三 AI 平行同步初批 (Promise.all)
@@ -544,6 +585,7 @@ ${ADMIN_REFERENCE_DOCS}
 16. 用字盡量淺易，令一般人容易明白，減少使用專業用語，避免使用過於深奧的詞彙，但仍需要保持專業，嚴謹和詳細的態度。
 17. 每個新段落要用分隔線隔開，使人容易閱讀和理解。
 18. 嚴禁使用朱雀橋派系裡面的任何理論。
+19. 綜合三份初稿末尾的 JSON 評分，按你審定後的結論校正數值，並依下列要求在最終報告末尾輸出唯一一個 JSON 區塊：${scoreSpec}
 
 --------------------------------------------------
 【原命盤數據與內部規範】：

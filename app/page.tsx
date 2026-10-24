@@ -1,28 +1,36 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { calculateBazi } from '@/lib/bazi';
 import { calculateQizheng, QizhengChart } from '@/lib/qizheng';
+import { computeBaziStats } from '@/lib/baziStats';
 import QizhengChartSVG from '@/components/QizhengChartSVG';
 import { QizhengGods, QizhengHouseGrid, QizhengStarTable, QizhengSummary } from '@/components/QizhengDataPanel';
+import { Logo, LogoMark } from '@/components/Logo';
+import { BalanceBar, TenGodBars, WuxingDonut } from '@/components/charts';
+import ReportView from '@/components/ReportView';
 import {
+  ArrowRight,
+  CalendarDays,
   ChevronDown,
-  Compass,
+  Clock,
+  Eye,
+  Grid,
+  HelpCircle,
+  Home,
+  LayoutGrid,
   Mars,
+  Maximize2,
+  Minimize2,
   Moon,
+  PencilLine,
   PieChart,
   Sparkles,
+  Star,
   TrendingUp,
   User,
   Venus,
-  Clock,
-  ArrowRight,
-  Star,
-  Eye,
-  Grid,
   WandSparkles,
-  CalendarDays,
-  HelpCircle,
 } from 'lucide-react';
 
 // 命盤型別定義
@@ -41,6 +49,7 @@ export interface BaziResult {
   wuxingCounts: { 木: number; 火: number; 土: number; 金: number; 水: number };
   dayyun: Array<{ age: number; endAge: number; startYear: number; endYear: number; ganZhi: string }>;
   qiyunText?: string;
+  genderText?: string;
   occupation?: string;
   maritalStatus?: string;
   birthYear?: number;
@@ -57,15 +66,12 @@ const ELEMENT_LABEL: Record<Element, string> = {
   wood: '木', fire: '火', earth: '土', metal: '金', water: '水',
 };
 
-const ELEMENT_STYLE: Record<
-  Element,
-  { text: string; bg: string; bar: string; dot: string; border: string }
-> = {
-  wood: { text: 'text-emerald-400', bg: 'bg-emerald-950/40', bar: 'bg-emerald-500', dot: 'bg-emerald-500', border: 'border-emerald-800/60' },
-  fire: { text: 'text-red-400', bg: 'bg-red-950/40', bar: 'bg-red-500', dot: 'bg-red-500', border: 'border-red-800/60' },
-  earth: { text: 'text-amber-400', bg: 'bg-amber-950/40', bar: 'bg-amber-500', dot: 'bg-amber-500', border: 'border-amber-800/60' },
-  metal: { text: 'text-slate-300', bg: 'bg-slate-800/50', bar: 'bg-slate-400', dot: 'bg-slate-400', border: 'border-slate-700/60' },
-  water: { text: 'text-blue-400', bg: 'bg-blue-950/40', bar: 'bg-blue-500', dot: 'bg-blue-500', border: 'border-blue-800/60' },
+const ELEMENT_STYLE: Record<Element, { text: string; bg: string; border: string }> = {
+  wood: { text: 'text-emerald-400', bg: 'bg-emerald-950/40', border: 'border-emerald-800/60' },
+  fire: { text: 'text-red-400', bg: 'bg-red-950/40', border: 'border-red-800/60' },
+  earth: { text: 'text-amber-400', bg: 'bg-amber-950/40', border: 'border-amber-800/60' },
+  metal: { text: 'text-slate-200', bg: 'bg-slate-800/50', border: 'border-slate-600/60' },
+  water: { text: 'text-blue-400', bg: 'bg-blue-950/40', border: 'border-blue-800/60' },
 };
 
 const GAN_ELEMENT: Record<string, Element> = {
@@ -89,7 +95,6 @@ interface Pillar {
   heavenlyTenGod: string;
   earthlyBranch: string;
   earthlyElement: Element;
-  earthlyTenGod: string;
   hiddenStems: { char: string; element: Element; god: string; qi: string }[];
 }
 
@@ -101,6 +106,7 @@ const HIDDEN_STEM_QI: Record<string, string[]> = {
 };
 
 interface LuckPeriod {
+  ganZhi: string;
   age: number;
   endAge: number;
   startYear: number;
@@ -118,39 +124,23 @@ function mapBaziToPillars(bazi: BaziResult): Pillar[] {
 
   return keys.map((key, i) => {
     const pData = bazi.eightChar[key];
-    const hGan = pData.gan;
-    const eZhi = pData.zhi;
-
-    const hiddenStems = pData.zangGan.map((char, idx) => ({
-      char,
-      element: GAN_ELEMENT[char] || 'earth',
-      god: pData.zangGanShishen[idx] || '',
-      qi: HIDDEN_STEM_QI[eZhi]?.[idx] || '',
-    }));
-
     return {
       key,
       label: labels[i],
       sublabel: sublabels[i],
-      heavenlyStem: hGan,
-      heavenlyElement: GAN_ELEMENT[hGan] || 'wood',
+      heavenlyStem: pData.gan,
+      heavenlyElement: GAN_ELEMENT[pData.gan] || 'wood',
       heavenlyTenGod: pData.ganShishen,
-      earthlyBranch: eZhi,
-      earthlyElement: ZHI_ELEMENT[eZhi] || 'wood',
-      earthlyTenGod: (pData as any).zhiShishen || hiddenStems[0]?.god || '',
-      hiddenStems,
+      earthlyBranch: pData.zhi,
+      earthlyElement: ZHI_ELEMENT[pData.zhi] || 'wood',
+      hiddenStems: pData.zangGan.map((char, idx) => ({
+        char,
+        element: GAN_ELEMENT[char] || 'earth',
+        god: pData.zangGanShishen[idx] || '',
+        qi: HIDDEN_STEM_QI[pData.zhi]?.[idx] || '',
+      })),
     };
   });
-}
-
-function mapBaziToDistribution(wuxingCounts: BaziResult['wuxingCounts']) {
-  return [
-    { element: 'wood' as Element, value: wuxingCounts.木 || 0 },
-    { element: 'fire' as Element, value: wuxingCounts.火 || 0 },
-    { element: 'earth' as Element, value: wuxingCounts.土 || 0 },
-    { element: 'metal' as Element, value: wuxingCounts.金 || 0 },
-    { element: 'water' as Element, value: wuxingCounts.水 || 0 },
-  ];
 }
 
 function mapBaziToLuck(dayyun: BaziResult['dayyun']): LuckPeriod[] {
@@ -159,6 +149,7 @@ function mapBaziToLuck(dayyun: BaziResult['dayyun']): LuckPeriod[] {
     const stem = item.ganZhi[0] || '';
     const branch = item.ganZhi[1] || '';
     return {
+      ganZhi: item.ganZhi,
       age: item.age,
       endAge: item.endAge,
       startYear: item.startYear,
@@ -172,64 +163,142 @@ function mapBaziToLuck(dayyun: BaziResult['dayyun']): LuckPeriod[] {
 }
 
 /* ------------------------------------------------------------------ */
-/* 首頁 Landing Page 組件                                              */
+/* 共用版面元件                                                        */
 /* ------------------------------------------------------------------ */
+
+function SectionCard({
+  id,
+  icon: Icon,
+  title,
+  subtitle,
+  action,
+  accent = false,
+  children,
+}: {
+  id?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  subtitle?: string;
+  action?: React.ReactNode;
+  accent?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      id={id}
+      className={`rounded-2xl border bg-slate-900/70 p-4 shadow-xl shadow-black/20 backdrop-blur sm:p-5 ${
+        accent ? 'border-amber-500/30' : 'border-slate-800'
+      }`}
+    >
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-400">
+            <Icon className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="truncate font-serif text-base font-bold text-slate-100 sm:text-lg">{title}</h2>
+            {subtitle && <p className="truncate text-[11px] text-slate-400">{subtitle}</p>}
+          </div>
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function SegmentedTabs<T extends string>({
+  tabs,
+  value,
+  onChange,
+  busy,
+}: {
+  tabs: readonly { id: T; label: string; icon: React.ComponentType<{ className?: string }> }[];
+  value: NoInfer<T>;
+  onChange: (v: NoInfer<T>) => void;
+  busy?: NoInfer<T> | null;
+}) {
+  return (
+    <div className="grid gap-1 rounded-xl border border-slate-800 bg-slate-950 p-1" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
+      {tabs.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => onChange(id)}
+          className={`flex h-10 items-center justify-center gap-1.5 rounded-lg px-1 text-xs font-bold transition-all sm:text-[13px] ${
+            value === id ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+          }`}
+        >
+          <Icon className="size-4 shrink-0" />
+          <span className="truncate">{label}</span>
+          {busy === id && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-current" />}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 首頁 Landing Page                                                   */
+/* ------------------------------------------------------------------ */
+
+const FEATURES = [
+  { icon: LayoutGrid, title: '子平八字', text: '真太陽時校正，四柱藏干餘氣十神，大運年份一目了然。' },
+  { icon: Star, title: '七政四餘', text: '以 Moira 為藍本，十二宮、廿八宿、七政四餘與神煞俱全。' },
+  { icon: Sparkles, title: 'AI 會診', text: '多模型聯合批算，深度解盤、流年批算與問事，配圖表解讀。' },
+];
 
 function LandingPage({ onEnter }: { onEnter: () => void }) {
   return (
-    <div className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-slate-950 text-slate-100 selection:bg-amber-500/30 selection:text-amber-200">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-amber-500/10 via-slate-950/80 to-slate-950" />
-      <div className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 size-[650px] rounded-full bg-amber-500/10 blur-[130px]" />
-      <div className="pointer-events-none absolute -bottom-40 left-1/2 -translate-x-1/2 size-[550px] rounded-full bg-blue-600/10 blur-[130px]" />
+    <div className="relative flex min-h-[100svh] w-full flex-col items-center justify-center overflow-hidden px-5 py-12 text-slate-100">
+      <div className="pointer-events-none absolute -top-40 left-1/2 size-[560px] -translate-x-1/2 rounded-full bg-amber-500/10 blur-[120px]" />
+      <div className="pointer-events-none absolute -bottom-40 left-1/2 size-[480px] -translate-x-1/2 rounded-full bg-blue-600/10 blur-[120px]" />
 
-      <div className="relative z-10 flex max-w-4xl flex-col items-center px-6 py-12 text-center">
-        <div className="relative mb-10 flex items-center justify-center">
-          <div className="absolute size-80 animate-[spin_80s_linear_infinite] rounded-full border border-amber-500/15 sm:size-[380px]" />
-          <div className="absolute size-72 animate-[spin_50s_linear_infinite_reverse] rounded-full border border-dashed border-amber-400/25 sm:size-80" />
-
-          <div className="relative flex size-52 sm:size-64 items-center justify-center rounded-full bg-gradient-to-b from-slate-900 via-slate-950 to-slate-950 p-3 shadow-[0_0_50px_rgba(245,158,11,0.25)] border border-amber-500/50 backdrop-blur-xl">
-            <svg className="size-full text-amber-400" viewBox="0 0 200 200" fill="none">
-              <defs>
-                <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#fef3c7" />
-                  <stop offset="50%" stopColor="#f59e0b" />
-                  <stop offset="100%" stopColor="#b45309" />
-                </linearGradient>
-              </defs>
-              <circle cx="100" cy="100" r="92" stroke="url(#goldGrad)" strokeWidth="1" strokeDasharray="1.5, 4.5" />
-              <circle cx="100" cy="100" r="86" stroke="url(#goldGrad)" strokeWidth="1.5" strokeOpacity="0.7" />
-              <circle cx="100" cy="100" r="48" fill="#020617" />
-              <path d="M 100 52 A 48 48 0 0 1 100 148 A 24 24 0 0 1 100 100 A 24 24 0 0 0 100 52 Z" fill="url(#goldGrad)" />
-              <circle cx="100" cy="76" r="5.5" fill="#020617" />
-              <circle cx="100" cy="124" r="5.5" fill="url(#goldGrad)" />
-            </svg>
+      <div className="relative z-10 flex w-full max-w-3xl flex-col items-center text-center">
+        <div className="relative mb-8 flex items-center justify-center">
+          <div className="absolute size-64 rounded-full border border-amber-500/10 sm:size-80" />
+          <div className="absolute size-56 animate-[spin_90s_linear_infinite_reverse] rounded-full border border-dashed border-amber-400/20 sm:size-72" />
+          <div className="relative rounded-full shadow-[0_0_80px_rgba(245,158,11,0.25)]">
+            <LogoMark size={176} animated className="sm:hidden" />
+            <LogoMark size={224} animated className="hidden sm:block" />
           </div>
         </div>
 
-        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs font-medium tracking-widest text-amber-300 backdrop-blur">
-          <Sparkles className="size-3.5 text-amber-400" />
-          星平合參 (子平八字 + 七政四餘) · 多模型 AI 聯合會診
+        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1.5 text-[11px] font-medium tracking-widest text-amber-300 sm:text-xs">
+          <Sparkles className="size-3.5" />
+          星平合參 · 子平八字 × 七政四餘
         </div>
 
-        <h1 className="mb-4 font-serif text-5xl font-medium tracking-tight text-slate-100 sm:text-7xl">
-          <span className="bg-gradient-to-r from-amber-100 via-amber-300 to-amber-500 bg-clip-text text-transparent">
-            算命網
-          </span>
+        <h1 className="font-serif text-5xl font-bold tracking-[0.2em] sm:text-7xl">
+          <span className="bg-gradient-to-b from-amber-50 via-amber-300 to-amber-600 bg-clip-text text-transparent">算命網</span>
         </h1>
+        <p className="mt-2 text-[11px] font-medium tracking-[0.5em] text-amber-500/70">CALYOURLIFE</p>
 
-        <p className="max-w-2xl font-serif text-lg leading-relaxed text-amber-200/90 sm:text-xl">
-          「天地玄黃，星平合參；四柱藏通變，七政定吉凶。」
+        <p className="mt-6 max-w-xl font-serif text-base leading-relaxed text-amber-100/80 sm:text-lg">
+          天地玄黃，星平合參；四柱藏通變，七政定吉凶。
         </p>
 
-        <div className="mt-10">
-          <button
-            type="button"
-            onClick={onEnter}
-            className="group relative inline-flex items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-9 py-4 font-serif text-lg font-semibold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.3)] transition-all duration-300 hover:scale-105 active:scale-95"
-          >
-            <span>進入星平命盤排盤</span>
-            <ArrowRight className="size-5 transition-transform duration-300 group-hover:translate-x-1" />
-          </button>
+        <button
+          type="button"
+          onClick={onEnter}
+          className="group mt-9 inline-flex h-14 w-full max-w-xs items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 font-serif text-lg font-bold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.3)] transition-transform active:scale-95 sm:hover:scale-105"
+        >
+          開始排盤
+          <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" />
+        </button>
+
+        <div className="mt-12 grid w-full gap-3 sm:grid-cols-3">
+          {FEATURES.map(({ icon: Icon, title, text }) => (
+            <div key={title} className="flex items-start gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-left backdrop-blur sm:flex-col">
+              <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
+                <Icon className="size-4.5" />
+              </span>
+              <div>
+                <div className="font-serif text-sm font-bold text-amber-100">{title}</div>
+                <p className="mt-1 text-xs leading-relaxed text-slate-400">{text}</p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -237,7 +306,7 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* 表單組件                                                            */
+/* 表單                                                                */
 /* ------------------------------------------------------------------ */
 
 interface SelectFieldProps {
@@ -247,16 +316,15 @@ interface SelectFieldProps {
   options: { value: string; label: string }[];
 }
 
+const INPUT_CLASS =
+  'h-11 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 text-base text-slate-100 outline-none transition-colors focus:border-amber-500/80 sm:text-sm';
+
 function SelectField({ label, value, onChange, options }: SelectFieldProps) {
   return (
-    <label className="flex flex-col gap-1.5 w-full">
+    <label className="flex w-full min-w-0 flex-col gap-1.5">
       <span className="text-xs font-medium text-slate-400">{label}</span>
       <div className="relative w-full">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full appearance-none rounded-lg border border-slate-800 bg-slate-950 px-3 py-2.5 pr-8 text-sm text-slate-100 outline-none focus:border-amber-500/80"
-        >
+        <select value={value} onChange={(e) => onChange(e.target.value)} className={`${INPUT_CLASS} appearance-none pr-8`}>
           {options.map((o) => (
             <option key={o.value} value={o.value} className="bg-slate-900 text-slate-200">
               {o.label}
@@ -308,9 +376,11 @@ const MARITAL_OPTIONS = [
 function BaziForm({
   onSubmit,
   loading,
+  hasResult,
 }: {
   onSubmit: (formData: any) => void;
   loading: boolean;
+  hasResult: boolean;
 }) {
   const [name, setName] = useState('');
   const [gender, setGender] = useState<'male' | 'female'>('male');
@@ -323,202 +393,244 @@ function BaziForm({
   const [minute, setMinute] = useState('0');
   const [occupation, setOccupation] = useState('');
   const [maritalStatus, setMaritalStatus] = useState('單身未婚');
+  const [expanded, setExpanded] = useState(false);
+
+  const collapsed = hasResult && !expanded;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setExpanded(false);
     onSubmit({
       name, year, month, day, hour, minute, gender, trueSolar, longitude, occupation: occupation.trim(), maritalStatus,
     });
   };
 
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-full rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl sm:p-6 backdrop-blur print:hidden">
-      <div className="mb-5 flex items-center gap-2">
-        <span className="inline-flex size-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400">
-          <User className="size-4" />
-        </span>
-        <div>
-          <h2 className="font-serif text-lg font-medium text-slate-100">命主資料</h2>
-          <p className="text-xs text-slate-400">填寫出生資訊與背景以生成八字與七政星盤</p>
-        </div>
-      </div>
+    <form
+      id="form"
+      onSubmit={handleSubmit}
+      className="w-full rounded-2xl border border-slate-800 bg-slate-900/70 p-4 shadow-xl shadow-black/20 backdrop-blur sm:p-5 lg:sticky lg:top-20 print:hidden"
+    >
+      {collapsed && (
+        <button type="button" onClick={() => setExpanded(true)} className="flex w-full items-center gap-3 text-left lg:hidden">
+          <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
+            {gender === 'male' ? <Mars className="size-5" /> : <Venus className="size-5" />}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-serif text-[15px] font-bold text-slate-100">
+              {name || (gender === 'male' ? '乾造' : '坤造')}
+            </span>
+            <span className="block truncate text-xs text-slate-400">
+              {year}年{month}月{day}日 {hour.padStart(2, '0')}:{minute.padStart(2, '0')}
+              {trueSolar === 'on' && ` · ${LOCATION_OPTIONS.find((l) => l.value === longitude)?.label.split(' ')[0]}`}
+            </span>
+          </span>
+          <span className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-700 px-3 text-xs text-slate-300">
+            <PencilLine className="size-3.5" /> 修改
+          </span>
+        </button>
+      )}
 
-      <div className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1.5 w-full">
-          <span className="text-xs font-medium text-slate-400">姓名</span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="請輸入姓名"
-            className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-amber-500/80"
-          />
-        </label>
-
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-slate-400">性別</span>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setGender('male')}
-              className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-all ${
-                gender === 'male' ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold' : 'bg-slate-950 text-slate-400 border-slate-800'
-              }`}
-            >
-              <Mars className="size-4" /> 乾造 · 男
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setGender('female')}
-              className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-all ${
-                gender === 'female' ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold' : 'bg-slate-950 text-slate-400 border-slate-800'
-              }`}
-            >
-              <Venus className="size-4" /> 坤造 · 女
-            </button>
+      <div className={collapsed ? 'hidden lg:block' : ''}>
+        <div className="mb-5 flex items-center gap-2.5">
+          <span className="inline-flex size-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400">
+            <User className="size-4" />
+          </span>
+          <div>
+            <h2 className="font-serif text-lg font-bold text-slate-100">命主資料</h2>
+            <p className="text-xs text-slate-400">填寫出生資訊以生成八字與七政星盤</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
-          <SelectField label="出生年" value={year} onChange={setYear} options={range(1940, 2026, '年')} />
-          <SelectField label="出生月" value={month} onChange={setMonth} options={range(1, 12, '月')} />
-          <SelectField label="出生日" value={day} onChange={setDay} options={range(1, 31, '日')} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <SelectField
-            label="出生小時"
-            value={hour}
-            onChange={setHour}
-            options={Array.from({ length: 24 }, (_, i) => ({ value: String(i), label: `${String(i).padStart(2, '0')} 時` }))}
-          />
-          <SelectField
-            label="出生分鐘"
-            value={minute}
-            onChange={setMinute}
-            options={Array.from({ length: 60 }, (_, i) => ({ value: String(i), label: `${String(i).padStart(2, '0')} 分` }))}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <label className="flex flex-col gap-1.5 w-full">
-            <span className="text-xs font-medium text-slate-400">現時職業（選填）</span>
-            <input
-              value={occupation}
-              onChange={(e) => setOccupation(e.target.value)}
-              placeholder="例如：IT、金融、創業..."
-              className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-amber-500/80"
-            />
+        <div className="flex flex-col gap-4">
+          <label className="flex w-full flex-col gap-1.5">
+            <span className="text-xs font-medium text-slate-400">姓名（選填）</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="請輸入姓名" className={INPUT_CLASS} />
           </label>
 
-          <SelectField label="感情/婚姻狀態" value={maritalStatus} onChange={setMaritalStatus} options={MARITAL_OPTIONS} />
-        </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-slate-400">性別</span>
+            <div className="grid grid-cols-2 gap-2">
+              {(['male', 'female'] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setGender(g)}
+                  className={`flex h-11 items-center justify-center gap-2 rounded-xl border text-sm transition-all ${
+                    gender === g ? 'border-amber-400 bg-amber-500 font-bold text-slate-950' : 'border-slate-800 bg-slate-950 text-slate-400'
+                  }`}
+                >
+                  {g === 'male' ? <Mars className="size-4" /> : <Venus className="size-4" />}
+                  {g === 'male' ? '乾造 · 男' : '坤造 · 女'}
+                </button>
+              ))}
+            </div>
+          </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <SelectField label="真太陽時校正" value={trueSolar} onChange={setTrueSolar} options={[{ value: 'on', label: '開啟真太陽時' }, { value: 'off', label: '關閉' }]} />
-          {trueSolar === 'on' && <SelectField label="出生經度" value={longitude} onChange={setLongitude} options={LOCATION_OPTIONS} />}
-        </div>
+          <div className="grid grid-cols-3 gap-2">
+            <SelectField label="出生年" value={year} onChange={setYear} options={range(1940, 2026, '年')} />
+            <SelectField label="月" value={month} onChange={setMonth} options={range(1, 12, '月')} />
+            <SelectField label="日" value={day} onChange={setDay} options={range(1, 31, '日')} />
+          </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-3 text-sm font-medium text-slate-950 shadow-lg transition-all hover:bg-amber-400 disabled:opacity-70"
-        >
-          <Sparkles className="size-4" />
-          {loading ? '星平合參排盤中…' : '星平合參排盤與 AI 會診'}
-        </button>
+          <div className="grid grid-cols-2 gap-2">
+            <SelectField
+              label="出生時"
+              value={hour}
+              onChange={setHour}
+              options={Array.from({ length: 24 }, (_, i) => ({ value: String(i), label: `${String(i).padStart(2, '0')} 時` }))}
+            />
+            <SelectField
+              label="分"
+              value={minute}
+              onChange={setMinute}
+              options={Array.from({ length: 60 }, (_, i) => ({ value: String(i), label: `${String(i).padStart(2, '0')} 分` }))}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-2">
+            <SelectField label="真太陽時校正" value={trueSolar} onChange={setTrueSolar} options={[{ value: 'on', label: '開啟真太陽時' }, { value: 'off', label: '關閉' }]} />
+            {trueSolar === 'on' && <SelectField label="出生地" value={longitude} onChange={setLongitude} options={LOCATION_OPTIONS} />}
+          </div>
+
+          <details className="group rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5 [&_summary::-webkit-details-marker]:hidden">
+            <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-medium text-slate-300">
+              背景資料（選填，令 AI 批算更貼身）
+              <ChevronDown className="size-4 text-slate-500 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="mt-3 flex flex-col gap-3">
+              <label className="flex w-full flex-col gap-1.5">
+                <span className="text-xs font-medium text-slate-400">現時職業</span>
+                <input value={occupation} onChange={(e) => setOccupation(e.target.value)} placeholder="例如：IT、金融、創業..." className={INPUT_CLASS} />
+              </label>
+              <SelectField label="感情／婚姻狀態" value={maritalStatus} onChange={setMaritalStatus} options={MARITAL_OPTIONS} />
+            </div>
+          </details>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 text-[15px] font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition-transform active:scale-[0.98] disabled:opacity-70"
+          >
+            <Sparkles className="size-4" />
+            {loading ? '星平合參排盤中…' : hasResult ? '重新排盤' : '星平合參排盤'}
+          </button>
+        </div>
       </div>
     </form>
   );
 }
 
-function GlyphBlock({ char, element, caption }: { char: string; element: Element; caption: string }) {
-  const s = ELEMENT_STYLE[element];
-  return (
-    <div className={`flex flex-col items-center justify-center gap-0.5 rounded-xl border ${s.border} ${s.bg} px-1 py-1.5 sm:px-2 sm:py-2.5 shrink-0`}>
-      <span className={`font-serif text-xl sm:text-3xl font-bold leading-none ${s.text}`}>{char}</span>
-      <span className={`text-[9px] sm:text-[10px] font-medium ${s.text}`}>{caption}{ELEMENT_LABEL[element]}</span>
-    </div>
-  );
-}
+/* ------------------------------------------------------------------ */
+/* 四柱八字                                                            */
+/* ------------------------------------------------------------------ */
 
-function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarText?: string }) {
+function FourPillars({ pillars, bazi }: { pillars: Pillar[]; bazi: BaziResult }) {
+  const ordered = [...pillars].reverse();
+
   return (
-    <section className="flex flex-col gap-3 w-full overflow-hidden">
-      {trueSolarText && (
-        <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300">
-          <Clock className="size-4 shrink-0 text-amber-400" />
-          <span>{trueSolarText}</span>
+    <SectionCard
+      id="bazi"
+      icon={LayoutGrid}
+      title="四柱八字"
+      subtitle={`${bazi.genderText ?? ''} · ${bazi.lunarDate}`}
+      action={<span className="text-[10px] text-slate-500">右起 年 → 時</span>}
+    >
+      {bazi.trueSolarText && (
+        <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] leading-relaxed text-amber-200/90 sm:text-xs">
+          <Clock className="mt-0.5 size-3.5 shrink-0 text-amber-400" />
+          <span>{bazi.trueSolarText}</span>
         </div>
       )}
 
-      <div className="flex items-baseline justify-between">
-        <h2 className="font-serif text-lg sm:text-xl font-medium text-slate-100">四柱八字 · 藏干餘氣十神</h2>
-        <span className="text-[11px] sm:text-xs text-slate-400">（右起：年柱 ➔ 月柱 ➔ 日柱 ➔ 時柱）</span>
+      <div className="grid grid-cols-4 gap-1.5 sm:gap-3">
+        {ordered.map((p) => {
+          const isDay = p.key === 'day';
+          const stem = ELEMENT_STYLE[p.heavenlyElement];
+          const branch = ELEMENT_STYLE[p.earthlyElement];
+          return (
+            <article
+              key={p.key}
+              className={`flex min-w-0 flex-col rounded-xl border p-1.5 sm:rounded-2xl sm:p-3 ${
+                isDay ? 'border-amber-500/70 bg-amber-500/[0.06] ring-1 ring-amber-500/20' : 'border-slate-800 bg-slate-950/50'
+              }`}
+            >
+              <header className="mb-1.5 text-center">
+                <h3 className={`font-serif text-[13px] font-bold sm:text-base ${isDay ? 'text-amber-300' : 'text-slate-200'}`}>{p.label}</h3>
+                <p className="hidden text-[10px] text-slate-500 sm:block">{p.sublabel}</p>
+              </header>
+
+              <div className="mb-1 text-center">
+                <span
+                  className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium sm:text-[11px] ${
+                    isDay ? 'bg-amber-500 text-slate-950' : 'border border-amber-500/30 text-amber-300'
+                  }`}
+                >
+                  {p.heavenlyTenGod}
+                </span>
+              </div>
+
+              <div className={`flex flex-col items-center rounded-lg border ${stem.border} ${stem.bg} py-1.5 sm:py-2.5`}>
+                <span className={`font-serif text-[28px] font-bold leading-none sm:text-4xl ${stem.text}`}>{p.heavenlyStem}</span>
+                <span className={`mt-1 text-[9px] sm:text-[10px] ${stem.text}`}>{ELEMENT_LABEL[p.heavenlyElement]}</span>
+              </div>
+              <div className={`mt-1 flex flex-col items-center rounded-lg border ${branch.border} ${branch.bg} py-1.5 sm:mt-1.5 sm:py-2.5`}>
+                <span className={`font-serif text-[28px] font-bold leading-none sm:text-4xl ${branch.text}`}>{p.earthlyBranch}</span>
+                <span className={`mt-1 text-[9px] sm:text-[10px] ${branch.text}`}>{ELEMENT_LABEL[p.earthlyElement]}</span>
+              </div>
+
+              <ul className="mt-1.5 flex flex-col gap-0.5 border-t border-slate-800 pt-1.5">
+                {p.hiddenStems.map((h) => (
+                  <li key={h.char} className="flex items-center justify-between gap-0.5 rounded px-0.5 text-[10px] sm:px-1 sm:text-xs">
+                    <span className="text-[9px] text-slate-500 sm:text-[10px]">{h.qi}</span>
+                    <span className={`font-serif text-sm font-bold sm:text-base ${ELEMENT_STYLE[h.element].text}`}>{h.char}</span>
+                    <span className="text-slate-300">{h.god}</span>
+                  </li>
+                ))}
+              </ul>
+            </article>
+          );
+        })}
       </div>
-
-      <div className="w-full overflow-x-auto pb-2 -mx-1 px-1">
-        <div className="flex min-w-[560px] sm:min-w-0 flex-row-reverse gap-2 sm:gap-3 items-stretch">
-          {pillars.map((p) => {
-            const isDay = p.key === 'day';
-            const slots = [...p.hiddenStems];
-            while (slots.length < 3) slots.push({ char: '', element: 'earth', god: '', qi: '' });
-
-            return (
-              <article
-                key={p.key}
-                className={`flex flex-1 flex-col items-stretch rounded-2xl border bg-slate-900/90 p-2 sm:p-3.5 shadow-xl ${
-                  isDay ? 'border-amber-500/80 ring-1 ring-amber-500/30' : 'border-slate-800'
-                }`}
-              >
-                <header className="mb-2 flex h-6 sm:h-7 items-center justify-between border-b border-slate-800/80 pb-1.5 shrink-0">
-                  <h3 className="font-serif text-sm sm:text-base font-bold text-slate-100">{p.label}</h3>
-                  <span className="text-[9px] sm:text-[10px] text-slate-400">{p.sublabel}</span>
-                </header>
-
-                <div className="flex flex-col gap-1.5 sm:gap-2 shrink-0">
-                  <div className="relative shrink-0">
-                    <GlyphBlock char={p.heavenlyStem} element={p.heavenlyElement} caption="天干 · " />
-                    <span className="absolute top-1 right-1 rounded bg-slate-950/80 px-1 py-0.5 text-[9px] text-amber-400 border border-amber-500/30">
-                      {p.heavenlyTenGod}
-                    </span>
-                  </div>
-
-                  <div className="relative shrink-0">
-                    <GlyphBlock char={p.earthlyBranch} element={p.earthlyElement} caption="地支 · " />
-                    <span className="absolute top-1 right-1 rounded bg-slate-950/80 px-1 py-0.5 text-[9px] text-slate-300 border border-slate-700/50">
-                      {p.earthlyTenGod}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-2 border-t border-slate-800/80 pt-1.5">
-                  <div className="mb-1 text-center text-[9px] sm:text-[10px] text-slate-500">藏干 · 餘氣</div>
-                  <div className="grid grid-cols-3 gap-1">
-                    {slots.map((h, i) => {
-                      if (!h.char) return <div key={i} className="rounded-md border border-dashed border-slate-800/60" />;
-                      const s = ELEMENT_STYLE[h.element];
-                      return (
-                        <div key={i} className={`flex flex-col items-center rounded-md border ${s.border} ${s.bg} py-1`}>
-                          <span className="text-[8px] sm:text-[9px] text-slate-500">{h.qi}</span>
-                          <span className={`font-serif text-sm sm:text-base font-bold leading-tight ${s.text}`}>{h.char}</span>
-                          <span className="text-[8px] sm:text-[9px] text-slate-300">{h.god}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </div>
-    </section>
+    </SectionCard>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* 七政四餘視覺化容器 (呼叫 components/QizhengChartSVG)                 */
+/* 命盤圖解                                                            */
+/* ------------------------------------------------------------------ */
+
+function ChartOverview({ bazi }: { bazi: BaziResult }) {
+  const stats = useMemo(() => computeBaziStats(bazi.eightChar, bazi.dayGan), [bazi]);
+  const raw = bazi.wuxingCounts;
+
+  return (
+    <SectionCard id="charts" icon={PieChart} title="命盤圖解" subtitle="五行力量 · 十神分佈 · 同異黨比例">
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3.5">
+          <div className="mb-3 flex items-baseline justify-between">
+            <span className="text-xs font-medium text-slate-300">五行力量（含藏干加權）</span>
+            <span className="text-[10px] text-slate-500">
+              原局字數 木{raw.木} 火{raw.火} 土{raw.土} 金{raw.金} 水{raw.水}
+            </span>
+          </div>
+          <WuxingDonut values={stats.wuxing} dayElement={stats.dayElement} />
+          <div className="mt-4">
+            <BalanceBar ratio={stats.supportRatio} dayElement={stats.dayElement} />
+          </div>
+          <p className="mt-2 text-[10px] leading-relaxed text-slate-500">天干計 1；藏干本氣 1、中氣 0.5、餘氣 0.3；月令藏干再乘 1.5。僅供參考，旺衰仍以格局論定。</p>
+        </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3.5">
+          <div className="mb-3 text-xs font-medium text-slate-300">十神分佈（含藏干加權）</div>
+          <TenGodBars counts={stats.tenGods} />
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 七政四餘                                                            */
 /* ------------------------------------------------------------------ */
 
 const QIZHENG_VIEWS = [
@@ -529,47 +641,36 @@ const QIZHENG_VIEWS = [
 
 function QizhengSection({ data }: { data: QizhengChart }) {
   const [viewMode, setViewMode] = useState<(typeof QIZHENG_VIEWS)[number]['id']>('svg');
+  const [zoomed, setZoomed] = useState(false);
 
   return (
-    <section className="rounded-2xl border border-amber-500/30 bg-slate-900/90 p-5 shadow-xl">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex size-6 items-center justify-center rounded-md bg-amber-500/20 text-amber-400">
-            <Star className="size-4" />
-          </span>
-          <h3 className="font-serif text-base font-medium text-slate-100">七政四餘星盤（果老星宗 · Moira 制）</h3>
-        </div>
-
-        <div className="flex items-center gap-1 rounded-lg bg-slate-950 p-1 border border-slate-800">
-          {QIZHENG_VIEWS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setViewMode(id)}
-              className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${
-                viewMode === id ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Icon className="size-3.5" /> {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
+    <SectionCard id="qizheng" icon={Star} title="七政四餘星盤" subtitle="果老星宗 · Moira 制" accent>
       <div className="flex flex-col gap-3">
+        <SegmentedTabs tabs={QIZHENG_VIEWS} value={viewMode} onChange={setViewMode} />
         <QizhengSummary data={data} />
 
         {viewMode === 'svg' && (
           <>
-            <div className="overflow-x-auto rounded-xl border border-amber-900/40">
-              <div className="min-w-[640px]">
-                <QizhengChartSVG data={data} />
+            <div className="relative">
+              <div className={`no-scrollbar rounded-xl border border-amber-900/40 ${zoomed ? 'overflow-auto' : 'overflow-hidden'}`}>
+                <div className={zoomed ? 'w-[760px]' : 'w-full'}>
+                  <QizhengChartSVG data={data} />
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setZoomed((z) => !z)}
+                className="absolute right-2 top-2 inline-flex h-9 items-center gap-1 rounded-lg bg-slate-950/80 px-2.5 text-xs text-amber-200 shadow backdrop-blur sm:hidden"
+              >
+                {zoomed ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+                {zoomed ? '縮小' : '放大'}
+              </button>
             </div>
             <p className="text-[11px] leading-relaxed text-slate-400">
-              由內至外：地支・卦・宮主 → 黃道宮 → 十二宮（紅為命宮、藍為身宮）→ <span className="text-blue-400">流年星曜</span> → 二十八宿（今制距星）→
+              由內至外：地支・卦・宮主 → 黃道宮 → 十二宮（紅為命宮、藍為身宮）→ <span className="text-blue-400">流年星曜</span> → 二十八宿 →
               <span className="text-emerald-400"> 本命七政四餘</span>（紅圈為逆／留／伏／蝕）→ <span className="text-violet-400">流年神煞</span> →
-              <span className="text-emerald-400"> 本命神煞</span> → 大限年份（紅線為當前行限）。滑鼠停留星曜可看度數。
+              <span className="text-emerald-400"> 本命神煞</span> → 大限年份。
+              <span className="sm:hidden">手機可按「放大」左右拖動查看細節。</span>
             </p>
           </>
         )}
@@ -583,67 +684,51 @@ function QizhengSection({ data }: { data: QizhengChart }) {
           </>
         )}
       </div>
-    </section>
+    </SectionCard>
   );
 }
 
-function PillarDetails({ distribution, luck, qiyunText }: { distribution: any[]; luck: LuckPeriod[]; qiyunText?: string }) {
+/* ------------------------------------------------------------------ */
+/* 大運                                                                */
+/* ------------------------------------------------------------------ */
+
+function LuckSection({ luck, qiyunText }: { luck: LuckPeriod[]; qiyunText?: string }) {
+  const scroller = useRef<HTMLOListElement>(null);
+
+  useEffect(() => {
+    const el = scroller.current?.querySelector<HTMLElement>('[data-current="true"]');
+    if (el && scroller.current) scroller.current.scrollLeft = el.offsetLeft - scroller.current.clientWidth / 2 + el.clientWidth / 2;
+  }, [luck]);
+
   return (
-    <div className="flex flex-col gap-4">
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
-        <h3 className="mb-3 font-serif text-base font-medium text-slate-100 flex items-center gap-2">
-          <PieChart className="size-4 text-slate-400" /> 五行分佈
-        </h3>
-        <div className="flex flex-col gap-2.5">
-          {distribution.map((d) => {
-            const s = ELEMENT_STYLE[d.element as Element];
-            const maxVal = Math.max(...distribution.map(x => x.value), 1);
-            const widthPct = Math.round((d.value / maxVal) * 100);
-            return (
-              <div key={d.element} className="flex items-center gap-2.5">
-                <span className={`inline-flex size-6 items-center justify-center rounded border ${s.border} ${s.bg} text-xs ${s.text}`}>
-                  {ELEMENT_LABEL[d.element as Element]}
-                </span>
-                <div className="h-2 flex-1 rounded-full bg-slate-950 overflow-hidden">
-                  <div className={`h-full ${s.bar}`} style={{ width: `${widthPct}%` }} />
-                </div>
-                <span className="text-xs text-slate-400 w-8 text-right">{d.value}</span>
+    <SectionCard id="luck" icon={TrendingUp} title="大運" subtitle={qiyunText}>
+      <ol ref={scroller} className="no-scrollbar -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
+        {luck.map((p) => (
+          <li key={p.startYear} data-current={p.current} className="flex shrink-0 snap-center flex-col items-center gap-1">
+            <div
+              className={`flex w-[4.5rem] flex-col items-center rounded-xl border px-1 py-2.5 sm:w-20 ${
+                p.current ? 'border-amber-500 bg-amber-500/10 shadow-lg shadow-amber-500/10' : 'border-slate-800 bg-slate-950/60'
+              }`}
+            >
+              <div className="flex flex-col font-serif text-xl font-bold leading-tight">
+                <span className={ELEMENT_STYLE[p.element].text}>{p.stem}</span>
+                <span className={ELEMENT_STYLE[ZHI_ELEMENT[p.branch] || 'earth'].text}>{p.branch}</span>
               </div>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
-        <h3 className="mb-3 font-serif text-base font-medium text-slate-100 flex items-center gap-2">
-          <TrendingUp className="size-4 text-slate-400" /> 大運走勢
-        </h3>
-        {qiyunText && <p className="mb-3 text-[11px] text-slate-400">{qiyunText}</p>}
-        <div className="overflow-x-auto pb-1">
-          <ol className="flex gap-2">
-            {luck.map((p) => {
-              const s = ELEMENT_STYLE[p.element];
-              return (
-                <li key={p.startYear} className="flex flex-col items-center gap-1">
-                  <div className={`w-[4.75rem] rounded-xl border p-2 text-center ${p.current ? 'border-amber-500 bg-amber-500/10' : 'border-slate-800 bg-slate-950'}`}>
-                    <div className="font-serif text-lg font-medium leading-tight">
-                      <span className={s.text}>{p.stem}</span>
-                      <span className={ELEMENT_STYLE[ZHI_ELEMENT[p.branch] || 'earth'].text}>{p.branch}</span>
-                    </div>
-                    <div className="mt-0.5 text-[11px] font-medium text-slate-200">{p.startYear}</div>
-                    <div className="text-[9px] text-slate-500">至 {p.endYear}</div>
-                    <div className="mt-0.5 text-[10px] text-slate-400">{p.age}–{p.endAge} 歲</div>
-                  </div>
-                  {p.current && <span className="text-[9px] font-medium text-amber-400">現行大運</span>}
-                </li>
-              );
-            })}
-          </ol>
-        </div>
-      </section>
-    </div>
+              <div className="mt-1.5 text-xs font-semibold tabular-nums text-slate-100">{p.startYear}</div>
+              <div className="text-[9px] tabular-nums text-slate-500">至 {p.endYear}</div>
+              <div className="mt-1 text-[10px] text-slate-400">{p.age}–{p.endAge}歲</div>
+            </div>
+            <span className={`text-[10px] font-medium ${p.current ? 'text-amber-400' : 'text-transparent'}`}>現行大運</span>
+          </li>
+        ))}
+      </ol>
+    </SectionCard>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* AI 會診中心                                                         */
+/* ------------------------------------------------------------------ */
 
 const STEMS = '甲乙丙丁戊己庚辛壬癸';
 const BRANCHES = '子丑寅卯辰巳午未申酉戌亥';
@@ -655,40 +740,58 @@ function yearGanZhi(year: number) {
 
 type AnalysisType = 'deep' | 'yearly' | 'yearly_qa';
 
-const ANALYSIS_TABS: { id: AnalysisType; label: string; icon: typeof Sparkles }[] = [
+const ANALYSIS_TABS = [
   { id: 'deep', label: '深度解盤', icon: WandSparkles },
   { id: 'yearly', label: '流年批算', icon: CalendarDays },
   { id: 'yearly_qa', label: '問事', icon: HelpCircle },
-];
+] as const;
 
 const QUICK_QUESTIONS = [
-  '今年事業有轉職跳槽或升遷機會嗎？',
-  '今年財運吉凶？適合投資理財嗎？',
-  '今年感情婚姻運勢如何？有桃花或感情變化嗎？',
-  '今年健康與身體狀況需要注意什麼？',
-  '今年有小人是非或口舌官非風險嗎？',
+  '事業有轉職或升遷機會嗎？',
+  '財運吉凶？適合投資嗎？',
+  '感情婚姻運勢如何？',
+  '健康需要注意什麼？',
+  '有小人是非或官非嗎？',
 ];
 
-function AiAnalysis({ baziData, userNotes, luck }: { baziData: BaziResult | null; userNotes: string; luck: LuckPeriod[] }) {
+function AiLoading() {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+      <div className="flex items-center gap-2 text-xs text-amber-300">
+        <LogoMark size={22} animated />
+        多個 AI 模型正在會診，約需 1–3 分鐘，請勿關閉頁面…
+      </div>
+      {[90, 75, 82, 60].map((w, i) => (
+        <div key={i} className="h-3 animate-pulse rounded bg-slate-800" style={{ width: `${w}%` }} />
+      ))}
+    </div>
+  );
+}
+
+function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod[] }) {
   const thisYear = new Date().getFullYear();
   const yearOptions = Array.from({ length: 13 }, (_, i) => thisYear - 2 + i);
 
   const [activeTab, setActiveTab] = useState<AnalysisType>('deep');
   const [targetYear, setTargetYear] = useState(thisYear);
   const [question, setQuestion] = useState('');
-  const [reports, setReports] = useState<Record<AnalysisType, string>>({ deep: '', yearly: '', yearly_qa: '' });
+  const [reports, setReports] = useState<Record<AnalysisType, { text: string; year?: number }>>({
+    deep: { text: '' },
+    yearly: { text: '' },
+    yearly_qa: { text: '' },
+  });
   const [loadingTab, setLoadingTab] = useState<AnalysisType | null>(null);
 
   const yearLuck = luck.find((p) => targetYear >= p.startYear && targetYear <= p.endYear);
   const yearLabel = `${targetYear} ${yearGanZhi(targetYear)}年`;
 
   const handleGenerate = async (type: AnalysisType, questionText?: string) => {
-    if (!baziData || loadingTab) return;
+    if (loadingTab) return;
     const q = (questionText ?? question).trim();
     if (type === 'yearly_qa' && !q) return;
 
     setLoadingTab(type);
-    setReports((r) => ({ ...r, [type]: '' }));
+    setReports((r) => ({ ...r, [type]: { text: '' } }));
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
@@ -696,15 +799,15 @@ function AiAnalysis({ baziData, userNotes, luck }: { baziData: BaziResult | null
         body: JSON.stringify({
           type,
           baziData,
-          userNotes,
+          userNotes: '',
           ...(type !== 'deep' && { targetYear }),
           ...(type === 'yearly_qa' && { question: q }),
         }),
       });
       const data = await res.json();
-      setReports((r) => ({ ...r, [type]: data.result || data.error || '無法生成報告。' }));
+      setReports((r) => ({ ...r, [type]: { text: data.result || data.error || '無法生成報告。', year: targetYear } }));
     } catch {
-      setReports((r) => ({ ...r, [type]: '請求發送失敗，請檢查網絡連線。' }));
+      setReports((r) => ({ ...r, [type]: { text: '請求發送失敗，請檢查網絡連線。' } }));
     } finally {
       setLoadingTab(null);
     }
@@ -714,62 +817,38 @@ function AiAnalysis({ baziData, userNotes, luck }: { baziData: BaziResult | null
   const report = reports[activeTab];
 
   const yearPicker = (
-    <div className="flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-950 p-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
-        <CalendarDays className="size-4 shrink-0 text-amber-400" />
-        {activeTab === 'yearly' ? '選擇批算流年：' : '選擇問事年份：'}
+    <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950 p-2.5">
+      <CalendarDays className="size-4 shrink-0 text-amber-400" />
+      <div className="relative min-w-0 flex-1">
+        <select
+          value={targetYear}
+          onChange={(e) => setTargetYear(Number(e.target.value))}
+          className="h-10 w-full appearance-none rounded-lg border border-slate-800 bg-slate-900 px-3 pr-8 text-base font-bold text-amber-300 outline-none focus:border-amber-500 sm:text-sm"
+        >
+          {yearOptions.map((y) => (
+            <option key={y} value={y} className="bg-slate-900 text-slate-200">
+              {y} {yearGanZhi(y)}年
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
       </div>
-      <div className="flex flex-1 items-center gap-2 sm:max-w-xs">
-        <div className="relative flex-1">
-          <select
-            value={targetYear}
-            onChange={(e) => setTargetYear(Number(e.target.value))}
-            className="w-full appearance-none rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 pr-8 text-xs font-bold text-amber-300 outline-none focus:border-amber-500"
-          >
-            {yearOptions.map((y) => (
-              <option key={y} value={y} className="bg-slate-900 text-slate-200">
-                {y} {yearGanZhi(y)}年
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-        </div>
-        {yearLuck && (
-          <span className="shrink-0 text-[11px] text-slate-400">
-            行 <span className="font-serif text-amber-300">{yearLuck.stem}{yearLuck.branch}</span> 運
-          </span>
-        )}
-      </div>
+      {yearLuck && (
+        <span className="shrink-0 rounded-lg border border-slate-800 px-2 py-1.5 text-[11px] text-slate-400">
+          行 <span className="font-serif font-bold text-amber-300">{yearLuck.ganZhi}</span> 運
+        </span>
+      )}
     </div>
   );
 
   return (
-    <section className="rounded-2xl border border-amber-500/30 bg-slate-900/90 p-5 shadow-xl">
-      <div className="flex items-center gap-2 pb-3 border-b border-slate-800 text-amber-400">
-        <Sparkles className="size-4" />
-        <h2 className="font-serif text-lg font-bold text-slate-100">AI 星平合參會診中心</h2>
-      </div>
+    <SectionCard id="ai" icon={Sparkles} title="AI 星平合參會診中心" subtitle="DeepSeek · Qwen · Grok 初批，Gemini 總審" accent>
+      <div className="flex flex-col gap-3">
+        <SegmentedTabs tabs={ANALYSIS_TABS} value={activeTab} onChange={setActiveTab} busy={loadingTab} />
 
-      <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-xl border border-slate-800/80 bg-slate-950 p-1.5">
-        {ANALYSIS_TABS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setActiveTab(id)}
-            className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-xs font-bold transition-all ${
-              activeTab === id ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-            }`}
-          >
-            <Icon className="size-4" /> {label}
-            {loadingTab === id && <span className="size-1.5 animate-pulse rounded-full bg-current" />}
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-4 flex flex-col gap-3">
         {activeTab === 'deep' && (
           <p className="text-xs leading-relaxed text-slate-400">
-            結合四柱格局、日主旺衰、喜用神，與七政四餘星曜落宮雙重會診，推算一生事業、財運、婚姻與健康總論。
+            結合四柱格局、日主旺衰、喜用神，與七政四餘星曜落宮雙重會診，推算一生事業、財運、婚姻與健康，並以圖表顯示各範疇評分及大運起伏。
           </p>
         )}
 
@@ -777,7 +856,7 @@ function AiAnalysis({ baziData, userNotes, luck }: { baziData: BaziResult | null
           <>
             {yearPicker}
             <p className="text-xs leading-relaxed text-slate-400">
-              以流年干支對照日主、大運與原局生剋沖合，並參照七政流年星曜，分事業、財運、感情、健康與每月吉凶批算。
+              以流年干支對照日主、大運與原局生剋沖合，參照七政流年星曜，批算事業、財運、感情、健康，並附逐月吉凶走勢圖。
             </p>
           </>
         )}
@@ -790,9 +869,9 @@ function AiAnalysis({ baziData, userNotes, luck }: { baziData: BaziResult | null
               onChange={(e) => setQuestion(e.target.value)}
               rows={3}
               placeholder="輸入想問的事情，例如：今年適合轉工嗎？"
-              className="w-full resize-y rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-amber-500/80"
+              className="w-full resize-y rounded-xl border border-slate-800 bg-slate-950 px-3 py-2.5 text-base text-slate-100 outline-none focus:border-amber-500/80 sm:text-sm"
             />
-            <div className="flex flex-wrap gap-1.5">
+            <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 sm:flex-wrap">
               {QUICK_QUESTIONS.map((q) => (
                 <button
                   key={q}
@@ -802,7 +881,7 @@ function AiAnalysis({ baziData, userNotes, luck }: { baziData: BaziResult | null
                     setQuestion(q);
                     handleGenerate('yearly_qa', q);
                   }}
-                  className="rounded-full border border-slate-700 bg-slate-950 px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:border-amber-500/60 hover:text-amber-300 disabled:opacity-50"
+                  className="h-9 shrink-0 rounded-full border border-slate-700 bg-slate-950 px-3 text-xs text-slate-300 transition-colors hover:border-amber-500/60 hover:text-amber-300 disabled:opacity-50"
                 >
                   {q}
                 </button>
@@ -815,11 +894,12 @@ function AiAnalysis({ baziData, userNotes, luck }: { baziData: BaziResult | null
           type="button"
           onClick={() => handleGenerate(activeTab)}
           disabled={!!loadingTab || (activeTab === 'yearly_qa' && !question.trim())}
-          className="w-full rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-60"
+          className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 text-[15px] font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition-transform active:scale-[0.98] disabled:opacity-60"
         >
-          {activeTab === 'deep' && (loading ? 'AI 多模型會診中…' : report ? '重新生成深度解盤' : '生成 AI 星平合參深度解盤')}
-          {activeTab === 'yearly' && (loading ? `批算【${yearLabel}】流年中…` : `批算【${yearLabel}】流年運勢`)}
-          {activeTab === 'yearly_qa' && (loading ? `推算【${yearLabel}】問事中…` : `就【${yearLabel}】問事`)}
+          <Sparkles className="size-4" />
+          {activeTab === 'deep' && (loading ? 'AI 多模型會診中…' : report.text ? '重新生成深度解盤' : '生成深度解盤')}
+          {activeTab === 'yearly' && (loading ? `批算【${yearLabel}】中…` : `批算【${yearLabel}】流年`)}
+          {activeTab === 'yearly_qa' && (loading ? '推算問事中…' : `就【${yearLabel}】問事`)}
         </button>
         {loadingTab && loadingTab !== activeTab && (
           <p className="text-center text-[11px] text-slate-500">
@@ -827,13 +907,69 @@ function AiAnalysis({ baziData, userNotes, luck }: { baziData: BaziResult | null
           </p>
         )}
 
-        {report && (
-          <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 text-sm leading-relaxed text-slate-200 whitespace-pre-line">
-            {report}
-          </div>
+        {loading && <AiLoading />}
+        {report.text && !loading && (
+          <ReportView
+            type={activeTab}
+            report={report.text}
+            targetYear={report.year}
+            luck={luck.map(({ ganZhi, startYear, endYear, current }) => ({ ganZhi, startYear, endYear, current }))}
+          />
         )}
       </div>
-    </section>
+    </SectionCard>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 手機底部導覽                                                        */
+/* ------------------------------------------------------------------ */
+
+const NAV_ITEMS = [
+  { id: 'form', label: '資料', icon: User },
+  { id: 'bazi', label: '八字', icon: LayoutGrid },
+  { id: 'qizheng', label: '星盤', icon: Star },
+  { id: 'luck', label: '大運', icon: TrendingUp },
+  { id: 'ai', label: '會診', icon: Sparkles },
+];
+
+function MobileNav() {
+  const [active, setActive] = useState('bazi');
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setActive(visible[0].target.id);
+      },
+      { rootMargin: '-30% 0px -55% 0px' }
+    );
+    NAV_ITEMS.forEach(({ id }) => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <nav className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-slate-800 bg-slate-950/90 backdrop-blur-lg lg:hidden print:hidden">
+      <ul className="mx-auto grid max-w-md grid-cols-5">
+        {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
+          <li key={id}>
+            <a
+              href={`#${id}`}
+              onClick={() => setActive(id)}
+              className={`flex h-14 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${
+                active === id ? 'text-amber-400' : 'text-slate-500'
+              }`}
+            >
+              <Icon className="size-5" />
+              {label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 
@@ -844,7 +980,6 @@ function AiAnalysis({ baziData, userNotes, luck }: { baziData: BaziResult | null
 export default function Page() {
   const [hasEntered, setHasEntered] = useState(false);
   const [baziData, setBaziData] = useState<BaziResult | null>(null);
-  const [userNotes, setUserNotes] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleFormSubmit = (formData: any) => {
@@ -873,54 +1008,59 @@ export default function Page() {
         longitude: Number(formData.longitude), occupation: formData.occupation, maritalStatus: formData.maritalStatus, qizhengData: qizheng,
       });
       setLoading(false);
+      if (window.matchMedia('(max-width: 1023px)').matches) {
+        requestAnimationFrame(() => document.getElementById('bazi')?.scrollIntoView({ behavior: 'smooth' }));
+      }
     }, 300);
   };
 
   if (!hasEntered) return <LandingPage onEnter={() => setHasEntered(true)} />;
 
   const pillars = baziData ? mapBaziToPillars(baziData) : [];
-  const distribution = baziData ? mapBaziToDistribution(baziData.wuxingCounts) : [];
   const luck = baziData ? mapBaziToLuck(baziData.dayyun) : [];
 
   return (
-    <main className="min-h-screen w-full bg-slate-950 text-slate-100 selection:bg-amber-500/30">
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
-        <header className="mb-6 flex items-center justify-between border-b border-slate-800 pb-4">
-          <div className="flex items-center gap-2.5">
-            <span className="inline-flex size-9 items-center justify-center rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
-              <Compass className="size-5" />
-            </span>
-            <div>
-              <h1 className="font-serif text-xl font-medium text-slate-100">算命網</h1>
-              <p className="text-[10px] text-slate-400">星平合參 (子平八字 + 七政四餘) · AI 會診</p>
-            </div>
-          </div>
-          <button type="button" onClick={() => setHasEntered(false)} className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-300">
-            回首頁
+    <main className={`min-h-screen w-full text-slate-100 ${baziData ? 'pb-20 lg:pb-10' : 'pb-10'}`}>
+      <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-lg print:hidden">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:h-16 sm:px-6">
+          <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="回到頂部">
+            <Logo size={36} />
           </button>
-        </header>
+          <button
+            type="button"
+            onClick={() => setHasEntered(false)}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 text-xs text-slate-300"
+          >
+            <Home className="size-3.5" /> 首頁
+          </button>
+        </div>
+      </header>
 
-        <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
-          <BaziForm onSubmit={handleFormSubmit} loading={loading} />
+      <div className="mx-auto max-w-6xl px-3 pt-4 sm:px-6 sm:pt-8">
+        <div className="grid items-start gap-4 lg:grid-cols-[320px_1fr] lg:gap-6">
+          <BaziForm onSubmit={handleFormSubmit} loading={loading} hasResult={!!baziData} />
 
-          <div className="flex flex-col gap-5">
+          <div className="flex min-w-0 flex-col gap-4 sm:gap-5">
             {baziData ? (
               <>
-                <FourPillars pillars={pillars} trueSolarText={baziData.trueSolarText} />
+                <FourPillars pillars={pillars} bazi={baziData} />
+                <ChartOverview bazi={baziData} />
                 {baziData.qizhengData && <QizhengSection data={baziData.qizhengData} />}
-                <PillarDetails distribution={distribution} luck={luck} qiyunText={baziData.qiyunText} />
-                <AiAnalysis baziData={baziData} userNotes={userNotes} luck={luck} />
+                <LuckSection luck={luck} qiyunText={baziData.qiyunText} />
+                <AiAnalysis baziData={baziData} luck={luck} />
               </>
             ) : (
-              <div className="flex h-[380px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-800 text-center">
+              <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-800 px-6 py-16 text-center">
                 <Moon className="size-6 text-slate-500" />
                 <p className="text-sm font-medium text-slate-300">等待排盤</p>
-                <p className="text-xs text-slate-500">填寫左側資料並點擊排盤以呈現星平命盤。</p>
+                <p className="text-xs text-slate-500">填寫命主資料並按「星平合參排盤」，即可呈現八字與七政星盤。</p>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {baziData && <MobileNav />}
     </main>
   );
 }

@@ -1,5 +1,5 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono, Noto_Serif_TC } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,9 +12,24 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const notoSerifTC = Noto_Serif_TC({
+  variable: "--font-noto-serif-tc",
+  weight: ["500", "700"],
+  preload: false,
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: '八字排盤與 AI 命理分析 | CalYourLife',
-  description: '提供精確八字四柱排盤、藏干十神計算、五行喜用分析與 AI 命理解答。',
+  title: '算命網 · 星平合參八字排盤與 AI 命理分析 | CalYourLife',
+  description: '子平八字四柱排盤、藏干餘氣十神、大運流年，結合七政四餘星盤與多模型 AI 會診，提供深度解盤、流年批算與問事。',
+  appleWebApp: { title: '算命網', statusBarStyle: 'black-translucent' },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#020617',
 };
 
 export default function RootLayout({
@@ -24,8 +39,8 @@ export default function RootLayout({
 }) {
   return (
     <html
-      lang="zh-TW"
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
+      lang="zh-Hant"
+      className={`${geistSans.variable} ${geistMono.variable} ${notoSerifTC.variable} dark h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-slate-950 text-slate-100">
         {children}
