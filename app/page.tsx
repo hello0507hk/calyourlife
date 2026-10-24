@@ -20,6 +20,9 @@ import {
   Star,
   Eye,
   Grid,
+  WandSparkles,
+  CalendarDays,
+  HelpCircle,
 } from 'lucide-react';
 
 // 命盤型別定義
@@ -36,7 +39,8 @@ export interface BaziResult {
     hour: { gan: string; zhi: string; ganShishen: string; zangGan: string[]; zangGanShishen: string[] };
   };
   wuxingCounts: { 木: number; 火: number; 土: number; 金: number; 水: number };
-  dayyun: Array<{ age: number; ganZhi: string }>;
+  dayyun: Array<{ age: number; endAge: number; startYear: number; endYear: number; ganZhi: string }>;
+  qiyunText?: string;
   occupation?: string;
   maritalStatus?: string;
   birthYear?: number;
@@ -86,12 +90,21 @@ interface Pillar {
   earthlyBranch: string;
   earthlyElement: Element;
   earthlyTenGod: string;
-  hiddenStems: { char: string; element: Element; god: string }[];
+  hiddenStems: { char: string; element: Element; god: string; qi: string }[];
 }
 
+// 與 lunar-javascript 藏干次序對齊；四庫第二位為上季餘氣、第三位為庫中氣
+const HIDDEN_STEM_QI: Record<string, string[]> = {
+  子: ['本氣'], 丑: ['本氣', '餘氣', '中氣'], 寅: ['本氣', '中氣', '餘氣'], 卯: ['本氣'],
+  辰: ['本氣', '餘氣', '中氣'], 巳: ['本氣', '中氣', '餘氣'], 午: ['本氣', '中氣'], 未: ['本氣', '餘氣', '中氣'],
+  申: ['本氣', '中氣', '餘氣'], 酉: ['本氣'], 戌: ['本氣', '餘氣', '中氣'], 亥: ['本氣', '中氣'],
+};
+
 interface LuckPeriod {
-  age: string;
-  year: string;
+  age: number;
+  endAge: number;
+  startYear: number;
+  endYear: number;
   stem: string;
   branch: string;
   element: Element;
@@ -112,6 +125,7 @@ function mapBaziToPillars(bazi: BaziResult): Pillar[] {
       char,
       element: GAN_ELEMENT[char] || 'earth',
       god: pData.zangGanShishen[idx] || '',
+      qi: HIDDEN_STEM_QI[eZhi]?.[idx] || '',
     }));
 
     return {
@@ -140,16 +154,19 @@ function mapBaziToDistribution(wuxingCounts: BaziResult['wuxingCounts']) {
 }
 
 function mapBaziToLuck(dayyun: BaziResult['dayyun']): LuckPeriod[] {
-  return dayyun.map((item, idx) => {
+  const thisYear = new Date().getFullYear();
+  return dayyun.map((item) => {
     const stem = item.ganZhi[0] || '';
     const branch = item.ganZhi[1] || '';
     return {
-      age: String(item.age),
-      year: `+${item.age}歲`,
+      age: item.age,
+      endAge: item.endAge,
+      startYear: item.startYear,
+      endYear: item.endYear,
       stem,
       branch,
       element: GAN_ELEMENT[stem] || 'earth',
-      current: idx === 0,
+      current: thisYear >= item.startYear && thisYear <= item.endYear,
     };
   });
 }
@@ -436,7 +453,7 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
       )}
 
       <div className="flex items-baseline justify-between">
-        <h2 className="font-serif text-lg sm:text-xl font-medium text-slate-100">四柱八字 · 藏干十神</h2>
+        <h2 className="font-serif text-lg sm:text-xl font-medium text-slate-100">四柱八字 · 藏干餘氣十神</h2>
         <span className="text-[11px] sm:text-xs text-slate-400">（右起：年柱 ➔ 月柱 ➔ 日柱 ➔ 時柱）</span>
       </div>
 
@@ -445,7 +462,7 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
           {pillars.map((p) => {
             const isDay = p.key === 'day';
             const slots = [...p.hiddenStems];
-            while (slots.length < 3) slots.push({ char: '', element: 'earth', god: '' });
+            while (slots.length < 3) slots.push({ char: '', element: 'earth', god: '', qi: '' });
 
             return (
               <article
@@ -472,6 +489,23 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
                     <span className="absolute top-1 right-1 rounded bg-slate-950/80 px-1 py-0.5 text-[9px] text-slate-300 border border-slate-700/50">
                       {p.earthlyTenGod}
                     </span>
+                  </div>
+                </div>
+
+                <div className="mt-2 border-t border-slate-800/80 pt-1.5">
+                  <div className="mb-1 text-center text-[9px] sm:text-[10px] text-slate-500">藏干 · 餘氣</div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {slots.map((h, i) => {
+                      if (!h.char) return <div key={i} className="rounded-md border border-dashed border-slate-800/60" />;
+                      const s = ELEMENT_STYLE[h.element];
+                      return (
+                        <div key={i} className={`flex flex-col items-center rounded-md border ${s.border} ${s.bg} py-1`}>
+                          <span className="text-[8px] sm:text-[9px] text-slate-500">{h.qi}</span>
+                          <span className={`font-serif text-sm sm:text-base font-bold leading-tight ${s.text}`}>{h.char}</span>
+                          <span className="text-[8px] sm:text-[9px] text-slate-300">{h.god}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </article>
@@ -553,7 +587,7 @@ function QizhengSection({ data }: { data: QizhengChart }) {
   );
 }
 
-function PillarDetails({ distribution, luck }: { distribution: any[]; luck: LuckPeriod[] }) {
+function PillarDetails({ distribution, luck, qiyunText }: { distribution: any[]; luck: LuckPeriod[]; qiyunText?: string }) {
   return (
     <div className="flex flex-col gap-4">
       <section className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
@@ -584,16 +618,26 @@ function PillarDetails({ distribution, luck }: { distribution: any[]; luck: Luck
         <h3 className="mb-3 font-serif text-base font-medium text-slate-100 flex items-center gap-2">
           <TrendingUp className="size-4 text-slate-400" /> 大運走勢
         </h3>
+        {qiyunText && <p className="mb-3 text-[11px] text-slate-400">{qiyunText}</p>}
         <div className="overflow-x-auto pb-1">
           <ol className="flex gap-2">
-            {luck.map((p) => (
-              <li key={p.age} className="flex flex-col items-center gap-1">
-                <div className={`w-16 rounded-xl border p-2 text-center ${p.current ? 'border-amber-500 bg-amber-500/10' : 'border-slate-800 bg-slate-950'}`}>
-                  <div className="font-serif text-base font-medium text-amber-300">{p.stem}{p.branch}</div>
-                  <span className="text-[10px] text-slate-400">{p.age} 歲</span>
-                </div>
-              </li>
-            ))}
+            {luck.map((p) => {
+              const s = ELEMENT_STYLE[p.element];
+              return (
+                <li key={p.startYear} className="flex flex-col items-center gap-1">
+                  <div className={`w-[4.75rem] rounded-xl border p-2 text-center ${p.current ? 'border-amber-500 bg-amber-500/10' : 'border-slate-800 bg-slate-950'}`}>
+                    <div className="font-serif text-lg font-medium leading-tight">
+                      <span className={s.text}>{p.stem}</span>
+                      <span className={ELEMENT_STYLE[ZHI_ELEMENT[p.branch] || 'earth'].text}>{p.branch}</span>
+                    </div>
+                    <div className="mt-0.5 text-[11px] font-medium text-slate-200">{p.startYear}</div>
+                    <div className="text-[9px] text-slate-500">至 {p.endYear}</div>
+                    <div className="mt-0.5 text-[10px] text-slate-400">{p.age}–{p.endAge} 歲</div>
+                  </div>
+                  {p.current && <span className="text-[9px] font-medium text-amber-400">現行大運</span>}
+                </li>
+              );
+            })}
           </ol>
         </div>
       </section>
@@ -601,29 +645,103 @@ function PillarDetails({ distribution, luck }: { distribution: any[]; luck: Luck
   );
 }
 
-function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; userNotes: string }) {
-  const [activeTab, setActiveTab] = useState<'deep' | 'yearly' | 'yearly_qa'>('deep');
-  const [report, setReport] = useState<string>('');
-  const [loading, setLoading] = useState(false);
+const STEMS = '甲乙丙丁戊己庚辛壬癸';
+const BRANCHES = '子丑寅卯辰巳午未申酉戌亥';
 
-  const handleGenerate = async () => {
-    if (!baziData) return;
-    setLoading(true);
-    setReport('');
+function yearGanZhi(year: number) {
+  const n = year - 4;
+  return `${STEMS[((n % 10) + 10) % 10]}${BRANCHES[((n % 12) + 12) % 12]}`;
+}
+
+type AnalysisType = 'deep' | 'yearly' | 'yearly_qa';
+
+const ANALYSIS_TABS: { id: AnalysisType; label: string; icon: typeof Sparkles }[] = [
+  { id: 'deep', label: '深度解盤', icon: WandSparkles },
+  { id: 'yearly', label: '流年批算', icon: CalendarDays },
+  { id: 'yearly_qa', label: '問事', icon: HelpCircle },
+];
+
+const QUICK_QUESTIONS = [
+  '今年事業有轉職跳槽或升遷機會嗎？',
+  '今年財運吉凶？適合投資理財嗎？',
+  '今年感情婚姻運勢如何？有桃花或感情變化嗎？',
+  '今年健康與身體狀況需要注意什麼？',
+  '今年有小人是非或口舌官非風險嗎？',
+];
+
+function AiAnalysis({ baziData, userNotes, luck }: { baziData: BaziResult | null; userNotes: string; luck: LuckPeriod[] }) {
+  const thisYear = new Date().getFullYear();
+  const yearOptions = Array.from({ length: 13 }, (_, i) => thisYear - 2 + i);
+
+  const [activeTab, setActiveTab] = useState<AnalysisType>('deep');
+  const [targetYear, setTargetYear] = useState(thisYear);
+  const [question, setQuestion] = useState('');
+  const [reports, setReports] = useState<Record<AnalysisType, string>>({ deep: '', yearly: '', yearly_qa: '' });
+  const [loadingTab, setLoadingTab] = useState<AnalysisType | null>(null);
+
+  const yearLuck = luck.find((p) => targetYear >= p.startYear && targetYear <= p.endYear);
+  const yearLabel = `${targetYear} ${yearGanZhi(targetYear)}年`;
+
+  const handleGenerate = async (type: AnalysisType, questionText?: string) => {
+    if (!baziData || loadingTab) return;
+    const q = (questionText ?? question).trim();
+    if (type === 'yearly_qa' && !q) return;
+
+    setLoadingTab(type);
+    setReports((r) => ({ ...r, [type]: '' }));
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: activeTab, baziData, userNotes }),
+        body: JSON.stringify({
+          type,
+          baziData,
+          userNotes,
+          ...(type !== 'deep' && { targetYear }),
+          ...(type === 'yearly_qa' && { question: q }),
+        }),
       });
       const data = await res.json();
-      setReport(data.result || '無法生成報告。');
+      setReports((r) => ({ ...r, [type]: data.result || data.error || '無法生成報告。' }));
     } catch {
-      setReport('請求發送失敗。');
+      setReports((r) => ({ ...r, [type]: '請求發送失敗，請檢查網絡連線。' }));
     } finally {
-      setLoading(false);
+      setLoadingTab(null);
     }
   };
+
+  const loading = loadingTab === activeTab;
+  const report = reports[activeTab];
+
+  const yearPicker = (
+    <div className="flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-950 p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
+        <CalendarDays className="size-4 shrink-0 text-amber-400" />
+        {activeTab === 'yearly' ? '選擇批算流年：' : '選擇問事年份：'}
+      </div>
+      <div className="flex flex-1 items-center gap-2 sm:max-w-xs">
+        <div className="relative flex-1">
+          <select
+            value={targetYear}
+            onChange={(e) => setTargetYear(Number(e.target.value))}
+            className="w-full appearance-none rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 pr-8 text-xs font-bold text-amber-300 outline-none focus:border-amber-500"
+          >
+            {yearOptions.map((y) => (
+              <option key={y} value={y} className="bg-slate-900 text-slate-200">
+                {y} {yearGanZhi(y)}年
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+        </div>
+        {yearLuck && (
+          <span className="shrink-0 text-[11px] text-slate-400">
+            行 <span className="font-serif text-amber-300">{yearLuck.stem}{yearLuck.branch}</span> 運
+          </span>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <section className="rounded-2xl border border-amber-500/30 bg-slate-900/90 p-5 shadow-xl">
@@ -632,20 +750,89 @@ function AiAnalysis({ baziData, userNotes }: { baziData: BaziResult | null; user
         <h2 className="font-serif text-lg font-bold text-slate-100">AI 星平合參會診中心</h2>
       </div>
 
-      <button
-        type="button"
-        onClick={handleGenerate}
-        disabled={loading}
-        className="mt-4 w-full rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-60"
-      >
-        {loading ? 'AI 多模型會診中…' : '生成 AI 星平合參解盤報告'}
-      </button>
+      <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-xl border border-slate-800/80 bg-slate-950 p-1.5">
+        {ANALYSIS_TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setActiveTab(id)}
+            className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-xs font-bold transition-all ${
+              activeTab === id ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+            }`}
+          >
+            <Icon className="size-4" /> {label}
+            {loadingTab === id && <span className="size-1.5 animate-pulse rounded-full bg-current" />}
+          </button>
+        ))}
+      </div>
 
-      {report && (
-        <div className="mt-4 rounded-xl bg-slate-950/70 border border-slate-800 p-4 text-sm text-slate-200 whitespace-pre-line leading-relaxed">
-          {report}
-        </div>
-      )}
+      <div className="mt-4 flex flex-col gap-3">
+        {activeTab === 'deep' && (
+          <p className="text-xs leading-relaxed text-slate-400">
+            結合四柱格局、日主旺衰、喜用神，與七政四餘星曜落宮雙重會診，推算一生事業、財運、婚姻與健康總論。
+          </p>
+        )}
+
+        {activeTab === 'yearly' && (
+          <>
+            {yearPicker}
+            <p className="text-xs leading-relaxed text-slate-400">
+              以流年干支對照日主、大運與原局生剋沖合，並參照七政流年星曜，分事業、財運、感情、健康與每月吉凶批算。
+            </p>
+          </>
+        )}
+
+        {activeTab === 'yearly_qa' && (
+          <>
+            {yearPicker}
+            <textarea
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              rows={3}
+              placeholder="輸入想問的事情，例如：今年適合轉工嗎？"
+              className="w-full resize-y rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-amber-500/80"
+            />
+            <div className="flex flex-wrap gap-1.5">
+              {QUICK_QUESTIONS.map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  disabled={!!loadingTab}
+                  onClick={() => {
+                    setQuestion(q);
+                    handleGenerate('yearly_qa', q);
+                  }}
+                  className="rounded-full border border-slate-700 bg-slate-950 px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:border-amber-500/60 hover:text-amber-300 disabled:opacity-50"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        <button
+          type="button"
+          onClick={() => handleGenerate(activeTab)}
+          disabled={!!loadingTab || (activeTab === 'yearly_qa' && !question.trim())}
+          className="w-full rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-60"
+        >
+          {activeTab === 'deep' && (loading ? 'AI 多模型會診中…' : report ? '重新生成深度解盤' : '生成 AI 星平合參深度解盤')}
+          {activeTab === 'yearly' && (loading ? `批算【${yearLabel}】流年中…` : `批算【${yearLabel}】流年運勢`)}
+          {activeTab === 'yearly_qa' && (loading ? `推算【${yearLabel}】問事中…` : `就【${yearLabel}】問事`)}
+        </button>
+        {loadingTab && loadingTab !== activeTab && (
+          <p className="text-center text-[11px] text-slate-500">
+            {ANALYSIS_TABS.find((t) => t.id === loadingTab)?.label}正在生成中，完成後才可提交新請求。
+          </p>
+        )}
+
+        {report && (
+          <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 text-sm leading-relaxed text-slate-200 whitespace-pre-line">
+            {report}
+          </div>
+        )}
+      </div>
     </section>
   );
 }
@@ -721,8 +908,8 @@ export default function Page() {
               <>
                 <FourPillars pillars={pillars} trueSolarText={baziData.trueSolarText} />
                 {baziData.qizhengData && <QizhengSection data={baziData.qizhengData} />}
-                <PillarDetails distribution={distribution} luck={luck} />
-                <AiAnalysis baziData={baziData} userNotes={userNotes} />
+                <PillarDetails distribution={distribution} luck={luck} qiyunText={baziData.qiyunText} />
+                <AiAnalysis baziData={baziData} userNotes={userNotes} luck={luck} />
               </>
             ) : (
               <div className="flex h-[380px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-800 text-center">

@@ -4,7 +4,7 @@ import { ADMIN_REFERENCE_DOCS } from '@/lib/adminKnowledge';
 // 1. 強制動態獲取環境變數，禁止靜態快取
 export const dynamic = 'force-dynamic';
 
-// 2. 超時限制（Vercel Pro 帳號設為 300 秒，Hobby 免費版請設為 60）
+// 2. 超時限制（Vercel Pro 設為 300 秒，Hobby 免費版請設為 60）
 export const maxDuration = 300;
 
 // 初始化全域統計變數 (供後台 /admin 讀取實時數據)
@@ -53,7 +53,7 @@ function checkGanHe(gans: string[]) {
   return uniqueFound.length > 0 ? uniqueFound.join('、') : '原局天干無五合組合';
 }
 
-// 構建傳給 AI 的八字 Prompt 文字
+// 構建傳給 AI 的「星平合參」（八字 + 七政四餘）Prompt 文字
 function buildBaziText(baziData: any, userNotes?: string) {
   const {
     eightChar,
@@ -67,10 +67,11 @@ function buildBaziText(baziData: any, userNotes?: string) {
     genderText,
     occupation,
     maritalStatus,
+    qizhengData, // 新增：七政四餘星盤數據
   } = baziData;
 
   const genderDisplay = genderText || (gender === 'female' ? '坤造（女）' : '乾造（男）');
-  const occupationDisplay = occupation && occupation.trim() !== '' ? occupation.trim() : '未提供（請根據八字格局推斷適合行業）';
+  const occupationDisplay = occupation && occupation.trim() !== '' ? occupation.trim() : '未提供（請根據八字與官祿宮格局推斷）';
   const maritalDisplay = maritalStatus && maritalStatus.trim() !== '' ? maritalStatus.trim() : '未提供';
 
   const allTenGods: string[] = [
@@ -105,7 +106,28 @@ function buildBaziText(baziData: any, userNotes?: string) {
 
   const formattedNotes = userNotes && userNotes.trim() !== '' 
     ? userNotes.trim() 
-    : '無額外補充資料，請直接進行常規八字全盤推算。';
+    : '無額外補充資料，請直接進行星平合參常規推算。';
+
+  // 解析七政四餘星盤資料
+  let qizhengText = '【七政四餘星盤數據】：未提供額外星盤資料，請以經典子平八字進行推算。';
+  if (qizhengData) {
+    const starsText = qizhengData.stars
+      ? qizhengData.stars.map((s: any) => `  * ${s.name}：落 ${s.zodiac}（宿度：${s.mansion || '未定'} ${s.degree ? s.degree + '°' : ''}）`).join('\n')
+      : '無星曜數據';
+
+    const housesText = qizhengData.houses
+      ? qizhengData.houses.map((h: any) => `  * ${h.name} (${h.zodiac})：${(h.stars && h.stars.length > 0) ? h.stars.join('、') : '無主星/餘星'}`).join('\n')
+      : '無宮位數據';
+
+    qizhengText = `
+【七政四餘星盤數據（星平合參對照）】：
+- 命宮：${qizhengData.mingGong || '未定'} | 身宮：${qizhengData.shenGong || '未定'}
+- 七政四餘星曜落宮：
+${starsText}
+- 十二宮位星曜佈局（官祿、財帛、夫妻、疾厄等）：
+${housesText}
+    `.trim();
+  }
 
   return `
 【陽曆日期】：${solarDate}
@@ -115,28 +137,32 @@ function buildBaziText(baziData: any, userNotes?: string) {
 【現時婚姻/感情狀態】：${maritalDisplay}
 【日主（日干）】：${dayGan}（五行屬${dayGanWuxing}）
 
-【四柱八字與十神藏干】：
-- 年柱：${eightChar.year.gan}${eightChar.year.zhi}（天干十神：${eightChar.year.ganShishen}，藏干：${eightChar.year.zangGan.join('/')}，藏干十神：${(eightChar.year.zangGanShishen || []).join('/')}）
-- 月柱：${eightChar.month.gan}${eightChar.month.zhi}（天干十神：${eightChar.month.ganShishen}，藏干：${eightChar.month.zangGan.join('/')}，藏干十神：${(eightChar.month.zangGanShishen || []).join('/')}）
-- 日柱：${eightChar.day.gan}${eightChar.day.zhi}（日主，藏干：${eightChar.day.zangGan.join('/')}，藏干十神：${(eightChar.day.zangGanShishen || []).join('/')}）
-- 時柱：${eightChar.hour.gan}${eightChar.hour.zhi}（天干十神：${eightChar.hour.ganShishen}，藏干：${eightChar.hour.zangGan.join('/')}，藏干十神：${(eightChar.hour.zangGanShishen || []).join('/')}）
+【子平四柱八字與十神藏干】：
+- 年柱：
+${eightChar.year.gan}${eightChar.year.zhi}（天干十神：${eightChar.year.ganShishen}，藏干：${eightChar.year.zangGan.join('/')}，藏干十神：${(eightChar.year.zangGanShishen || []).join('/')}）
+- 月柱：
+${eightChar.month.gan}${eightChar.month.zhi}（天干十神：${eightChar.month.ganShishen}，藏干：${eightChar.month.zangGan.join('/')}，藏干十神：${(eightChar.month.zangGanShishen || []).join('/')}）
+- 日柱：
+${eightChar.day.gan}${eightChar.day.zhi}（日主，藏干：${eightChar.day.zangGan.join('/')}，藏干十神：${(eightChar.day.zangGanShishen || []).join('/')}）
+- 時柱：
+${eightChar.hour.gan}${eightChar.hour.zhi}（天干十神：${eightChar.hour.ganShishen}，藏干：${eightChar.hour.zangGan.join('/')}，藏干十神：${(eightChar.hour.zangGanShishen || []).join('/')}）
 
 【天干五合檢驗結果】：${ganHeResult}
 
 【八字十神整體統計】：${godSummary || '無'}
 
 【八字五行數量統計】：
-- 木：${wuxingCounts.木} 個
-- 火：${wuxingCounts.火} 個
-- 土：${wuxingCounts.土} 個
-- 金：${wuxingCounts.金} 個
-- 水：${wuxingCounts.水} 個
+- 木：${wuxingCounts.木} 個 | 火：${wuxingCounts.火} 個 | 土：${wuxingCounts.土} 個 | 金：${wuxingCounts.金} 個 | 水：${wuxingCounts.水} 個
+
+${qizhengText}
 
 【命主自述個人背景 / 參考文檔 / 特定提問】：
 ${formattedNotes}
 
 【大運走勢】：
-${dayyun.map((d: any) => `- ${d.age}歲起大運：${d.ganZhi}`).join('\n')}
+${dayyun
+  .map((d: any) => `- ${d.ganZhi} 大運：${d.age}${d.endAge ? `–${d.endAge}` : ''}歲${d.startYear ? `（${d.startYear}–${d.endYear}年）` : ''}`)
+  .join('\n')}
   `.trim();
 }
 
@@ -154,8 +180,8 @@ export async function POST(req: Request) {
       (global as any).__site_stats.logs.push({
         time: new Date().toLocaleTimeString('zh-TW', { timeZone: 'Asia/Hong_Kong' }),
         level: 'INFO',
-        model: 'Multi-AI',
-        message: `收到八字批命請求 (類型: ${type || 'deep'})`,
+        model: 'Multi-AI (星平合參)',
+        message: `收到八字與七政會診請求 (類型: ${type || 'deep'})`,
       });
     }
 
@@ -178,63 +204,67 @@ export async function POST(req: Request) {
       );
     }
 
-    const formattedText = buildBaziText(baziData, userNotes);
+    const targetLuck = (baziData?.dayyun || []).find(
+      (d: any) => d.startYear && targetYear >= d.startYear && targetYear <= d.endYear
+    );
+    const formattedText = `${buildBaziText(baziData, userNotes)}${
+      type !== 'deep' && targetLuck ? `\n\n【${targetYear} 年所行大運】：${targetLuck.ganZhi}（${targetLuck.startYear}–${targetLuck.endYear}年）` : ''
+    }`;
     const targetGanZhiStr = getYearGanZhi(targetYear);
 
     // 基於三大功能（deep / yearly / yearly_qa）動態選用系統提示詞與輸出格式規範
     let initialSystemPrompt = '';
     let userPromptText = '';
 
-    const baseExpertPersona = `你是一位跟隨徐樂吾學習八字和七政四餘多年、深得徐樂吾真傳，精通子平八字、「滴天髓徵義」徐樂吾編註、「造化元鑰」徐樂吾評註、神峰通考、徐樂吾的有殺先論殺和「子平一得」蔡進源補註、鄭希誠的鄭氏星案、果老星宗和萬民英的星學大成的資深命理專家。利用滴天髓中的扶抑、調候、通關定格局與用捉用神的技術，造化元鑰中的十天干在不同月令的十天干喜忌，神峰通考中的病藥說和繼善編裡各種對命格的口訣，徐樂吾有殺先論殺如殺比日主弱，以財滋弱殺論，如殺比日主強，以殺印相生或食神制殺論、蔡進源補註「子平一得」中的命例來判斷八字格局高低，嚴禁使用朱鵲橋一派的任何理論來批算八字。
-和七政四餘的星盤互相配合，批斷命主的人生走向，事業，感情，健康等事件，請必定要完全根據使用者提供的已知八字數據，參考文檔，滴天髓徵義，造化元鑰，神峰通考，子平一得，鄭氏星案，果老星宗，星學大成等書藉進行分析，嚴禁修改干支或自行重新計算排盤。`;
+    const baseExpertPersona = `你是一位跟隨徐樂吾學習八字和七政四餘多年、深得徐樂吾真傳，精通子平八字與「星平合參」（子平八字 + 七政四餘星學）的資深命理大師。
+你熟讀《滴天髓徵義》徐樂吾編註、《造化元鑰》徐樂吾評註、《神峰通考》、徐樂吾「有殺先論殺」、《子平一得》蔡進源補註、鄭希誠《鄭氏星案》、《果老星宗》與萬民英《星學大成》。
+利用子平八字扶抑、調候、通關定格局與捉用神，同時對照七政四餘黃道十二宮（官祿宮、財帛宮、夫妻宮、疾厄宮等）、日月五星與四餘（羅睺、計都、紫氣、月孛）落宮狀態，互相印證。
+嚴禁使用朱鵲橋一派的任何理論，嚴禁修改干支或自行重新計算排盤。`;
 
     if (type === 'yearly') {
       initialSystemPrompt = `${baseExpertPersona}
 
-【分析任務】：請針對命主八字和七政四餘星盤進行【${targetGanZhiStr} 流年整體運勢解盤】。
-請務必結合命主的【現時職業】與【現時婚姻/感情狀態】進行深度的流年演繹。
+【分析任務】：請針對命主八字與七政四餘星盤進行【${targetGanZhiStr} 流年整體運勢解盤】。
+請務必結合命主的【現時職業】與【現時婚姻/感情狀態】進行深度的流年演繹與星平對照。
 
 請嚴格分成以下六部分，並以 Markdown 格式輸出：
-### 一、 流年整體運勢總評（流年 ${targetGanZhiStr} 干支對日主、大運及原局八字之生剋制化與衝合會刑穿分析）
-### 二、 事業與工作運勢推演（結合現時職業分析流年發展方向與轉職風險）
-### 三、 財運走勢與投資理財風險分析
-### 四、 感情婚姻與人際關係吉凶（結合現時婚姻/感情狀態推算桃花或夫妻感情磨合）
-### 五、 健康狀況與安全注意事項
+### 一、 流年整體運勢總評（流年 ${targetGanZhiStr} 干支對日主、大運及原局八字生剋，對照七政流年限路星曜）
+### 二、 事業與工作運勢推演（結合現時職業、八字官殺與七政【官祿宮】星曜分析轉職與升遷風險）
+### 三、 財運走勢與投資理財風險分析（對照八字財星與七政【財帛宮】受餘星侵擾或吉星加臨）
+### 四、 感情婚姻與人際關係吉凶（結合現時婚姻狀態、八字夫妻宮與七政【夫妻宮】主星推算）
+### 五、 健康狀況與安全注意事項（結合八字五行傾斜與七政【疾厄宮】星曜）
 ### 六、 全年吉凶月份提醒與趨吉避凶錦囊`;
 
-      userPromptText = `請幫我分析以下八字命盤在【${targetGanZhiStr}】的流年整體運勢：\n\n${formattedText}`;
+      userPromptText = `請幫我分析以下八字與七政四餘命盤在【${targetGanZhiStr}】的流年整體運勢：\n\n${formattedText}`;
     } else if (type === 'yearly_qa') {
       initialSystemPrompt = `${baseExpertPersona}
 
 【分析任務】：請針對命主於【${targetGanZhiStr}】提出之特定問題【${question || '流年吉凶問事'}】進行【流年問事精準解答】。
-請結合命主的【現時職業】與【現時婚姻/感情狀態】提供切合現實狀況的解答。
+請結合命主的【現時職業】與【現時婚姻/感情狀態】，運用星平合參提供切合現實狀況的解答。
 
 請嚴格分成以下二部分，並以 Markdown 格式輸出：
-### 一、 針對問題之流年吉凶明確斷語（直指好壞、變動或順逆）
+### 一、 針對問題之流年吉凶明確斷語（結合八字流年與七政宮位星曜直指好壞變動）
 ### 二、 具體應對方針與趨吉避凶行動建議`;
 
-      userPromptText = `命主針對【${targetGanZhiStr}】提出了具體提問：【${question || '流年吉凶問事'}】\n\n請結合以下八字命盤數據解答：\n\n${formattedText}`;
+      userPromptText = `命主針對【${targetGanZhiStr}】提出了具體提問：【${question || '流年吉凶問事'}】\n\n請結合以下命盤數據解答：\n\n${formattedText}`;
     } else {
       // 預設為原局深度解盤
       initialSystemPrompt = `${baseExpertPersona}
 
 【性別與感情婚姻批斷嚴格約束】：
-- 必須嚴格根據資料中的【命主性別】進行批斷，絕不可寫出「假設命主為男/女」或「假設」等字眼。
-- 若性別為「乾造（男）」，第四點感情婚姻必須直接以正財/偏財為妻星、日支為妻宮和參照內部參考法則和滴天髓徵義進行確切論述。
-- 若性別為「坤造（女）」，第四點感情婚姻必須直接參照內部參考法則和滴天髓徵義女命篇進行確切論述。
-- **感情婚姻現狀考量**：必須結合命主輸入的【現時婚姻/感情狀態】（如：已婚、單身、有穩定伴侶、離異）提供針對性的結婚時機、夫妻磨合或桃花防範建議。
+- 必須嚴格根據資料中的【命主性別】進行批斷，絕不可寫出「假設命主為男/女」等字眼。
+- 若性別為「乾造（男）」，第四點感情婚姻必須直接以正財/偏財為妻星、日支為妻宮，並對照七政【夫妻宮】星曜進行論述。
+- 若性別為「坤造（女）」，第四點感情婚姻必須直接參照女命官殺星與七政【夫妻宮】星曜確切論述。
+- **感情婚姻現狀考量**：必須結合命主輸入的【現時婚姻/感情狀態】（如：已婚、單身、有穩定伴侶、離異）提供針對性建議。
 
 【職業與事業批斷約束】：
-- 必須結合命主提供的【現時職業】，對照八字喜用神與十神格局，分析其當前行業之利弊，並給出事業升遷、轉型或跳槽之建議。
+- 必須結合命主提供的【現時職業】，對照八字喜用神、十神格局與七政【官祿宮】主星狀態，分析當前行業利弊並給出轉型升遷建議。
 
 【命理分析穩定性與一致性約束】：
-1. 【確定性推導原則】：相同八字原局必須導出唯一的日主用神判定，嚴禁在不同批算中出現矛盾結論。
-2. 【用神一貫性】：一旦在第一部分判定日主的用神，後續所有關於大運吉凶、感情婚姻、事業建議的分析，必須 100% 圍繞該用神進行演繹，不得出現用神前後不一致的情況。
-3. 捉用神必須先參照造化元鑰中十天干在不同月令的喜忌，滴天髓補註中的命例，子平一得的命例，必須在原局八字中找出有用之神，不可用地支藏元做用神，五行雖弱，但仍可作用神，如果八字天干地支入面找不到有用之神，除非該五行在原局中被傷盡，否則都應在原局中捉用神，日元必須當令的情況下，才可在月令藏元中捉用神，否則需要判斷是否無用神。
-4. 喜忌之定義是生旺用神是喜神，八字之中有用之神為用神，忌神為尅用神之神，病為原局八字問題之處，藥神為醫治病的藥。
-
-【七政四餘排盤原則】
-1. 以黃道回歸制和今制排盤
+1. 【確定性推導原則】：相同命盤必須導出唯一的日主用神與格局判定，嚴禁前後矛盾。
+2. 【用神一貫性】：一旦判定用神，後續所有大運、感情、事業分析必須 100% 圍繞該用神進行演繹。
+3. 捉用神必須先參照《造化元鑰》十天干月令喜忌與《子平一得》命例，必須在原局八字中找出有用之神。
+4. 有殺先論殺：原局有殺星，必須優先論殺（殺弱以財滋殺，殺強以印化殺或食神制殺）。
 
 【必須參考文獻與指定批命規範】：
 --------------------------------------------------
@@ -265,18 +295,18 @@ ${ADMIN_REFERENCE_DOCS}
 - 參考提到所有精通的八字書藉和內部參考法則，詳細分析原局八字加大運配合流年對命主事業、感情、健康的影響，利用十神含意推論產生的象，詳細，專業和嚴謹地推斷和解釋有機會發生什麼事，是吉是凶，提供趨吉避凶的方法，以 point form 形式列出
 
 ### 六、 當下流年運勢評語
-- 利用日主所輸入的出生日期，結合八字命盤，配合大運及流年，利用十神含意，生尅制化，詳細推斷對命主該年流年運勢的影響，包括吉凶、變化與可能的發展方向，並提供趨吉避凶的方法，只需要2027的流年，不需要其他年份
+- 利用日主所輸入的出生日期，結合八字命盤和七政四餘，配合大運及流年，利用十神含意，生尅制化，各星宿的生尅，詳細推斷對命主該年流年運勢的影響，包括吉凶、變化與可能的發展方向，並提供趨吉避凶的方法，只需要2027的流年，不需要其他年份
 
 語氣請保持客觀、理性且富有建設性，避免過度武斷或誇大災禍。`;
 
-      userPromptText = `請幫我分析以下八字命盤數據，進行【原局深度解盤】：\n\n${formattedText}`;
+      userPromptText = `請幫我分析以下八字與七政四餘命盤數據，進行【原局深度解盤】：\n\n${formattedText}`;
     }
 
     // ==================================================================
     // 第一階段：DeepSeek + Qwen + Grok 三 AI 平行同步初批 (Promise.all)
     // ==================================================================
 
-    // 1.1 DeepSeek 初批
+    // 1.1 DeepSeek 初批 (使用 deepseek-chat 旗艦通用模型)
     const deepseekPromise = fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
       signal: AbortSignal.timeout(280000),
@@ -285,7 +315,7 @@ ${ADMIN_REFERENCE_DOCS}
         Authorization: `Bearer ${deepseekKey}`,
       },
       body: JSON.stringify({
-        model: 'deepseek-flash',
+        model: 'deepseek-chat',
         temperature: 0.0,
         top_p: 0.1,
         messages: [
@@ -305,36 +335,9 @@ ${ADMIN_REFERENCE_DOCS}
       return null;
     });
 
-    // 1.2 Qwen 初批
+    // 1.2 Qwen 初批 (優先調用 qwen-max)
     let qwenPromise: Promise<any> = Promise.resolve(null);
-    if (openrouterKey) {
-      qwenPromise = fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        signal: AbortSignal.timeout(280000),
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${openrouterKey}`,
-        },
-        body: JSON.stringify({
-          model: 'qwen/qwen3.8-flash',
-          temperature: 0.0,
-          messages: [
-            { role: 'system', content: initialSystemPrompt },
-            { role: 'user', content: userPromptText },
-          ],
-        }),
-      }).then(async (res) => {
-        if (!res.ok) {
-          const err = await res.text();
-          executionErrors['Qwen(OpenRouter)'] = `HTTP ${res.status}: ${err}`;
-          return null;
-        }
-        return res.json();
-      }).catch((err) => {
-        executionErrors['Qwen(OpenRouter)'] = `網路異常: ${err.message}`;
-        return null;
-      });
-    } else if (dashscopeKey) {
+    if (dashscopeKey) {
       qwenPromise = fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
         method: 'POST',
         signal: AbortSignal.timeout(280000),
@@ -361,15 +364,41 @@ ${ADMIN_REFERENCE_DOCS}
         executionErrors['Qwen(DashScope)'] = `網路異常: ${err.message}`;
         return null;
       });
+    } else if (openrouterKey) {
+      qwenPromise = fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        signal: AbortSignal.timeout(280000),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${openrouterKey}`,
+        },
+        body: JSON.stringify({
+          model: 'qwen/qwen-2.5-72b-instruct',
+          temperature: 0.0,
+          messages: [
+            { role: 'system', content: initialSystemPrompt },
+            { role: 'user', content: userPromptText },
+          ],
+        }),
+      }).then(async (res) => {
+        if (!res.ok) {
+          const err = await res.text();
+          executionErrors['Qwen(OpenRouter)'] = `HTTP ${res.status}: ${err}`;
+          return null;
+        }
+        return res.json();
+      }).catch((err) => {
+        executionErrors['Qwen(OpenRouter)'] = `網路異常: ${err.message}`;
+        return null;
+      });
     } else {
       executionErrors['Qwen'] = '未設定 QWEN_API_KEY 或 OPENROUTER_API_KEY';
     }
 
-    // 1.3 Grok 初批 (順序優先調用最新模型)
+    // 1.3 Grok 初批 (調用 grok-2 / grok-2-latest)
     let grokPromise: Promise<any> = Promise.resolve(null);
-    
-    const preferredXaiModels = ['grok-4.3', 'grok-2-latest', 'grok-2', 'grok-2-vision-1212'];
-    const preferredOpenRouterModels = ['x-ai/grok-3', 'x-ai/grok-2', 'x-ai/grok-2-vision'];
+    const preferredXaiModels = ['grok-2-latest', 'grok-2'];
+    const preferredOpenRouterModels = ['x-ai/grok-2'];
 
     if (xaiKey) {
       grokPromise = (async () => {
@@ -393,7 +422,6 @@ ${ADMIN_REFERENCE_DOCS}
             });
 
             if (res.ok) {
-              console.log(`✅ Grok 直連成功，使用模型: (${modelName})`);
               return await res.json();
             } else {
               const errText = await res.text();
@@ -405,7 +433,6 @@ ${ADMIN_REFERENCE_DOCS}
         }
 
         if (openrouterKey) {
-          console.log('🔄 xAI 直連失敗，自動切換至 OpenRouter 嘗試最新 Grok 模型...');
           for (const orModel of preferredOpenRouterModels) {
             try {
               const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -426,7 +453,6 @@ ${ADMIN_REFERENCE_DOCS}
               });
 
               if (res.ok) {
-                console.log(`✅ OpenRouter 備援成功，使用 Grok 模型: (${orModel})`);
                 return await res.json();
               } else {
                 const errText = await res.text();
@@ -462,7 +488,6 @@ ${ADMIN_REFERENCE_DOCS}
             });
 
             if (res.ok) {
-              console.log(`✅ OpenRouter 成功，使用 Grok 模型: (${orModel})`);
               return await res.json();
             } else {
               const errText = await res.text();
@@ -497,8 +522,8 @@ ${ADMIN_REFERENCE_DOCS}
 
     if (geminiKey) {
       const geminiPrompt = `
-你是一位權威八字命理和七政四餘的總審閱官，精通子平八字、《滴天髓徵義》、《造化元鑰》、《子平一得》、神峰通考、鄭氏星案、果老星宗和萬民英的星學大成與指定命理規範。
-以下是由三位命理 AI（DeepSeek、Qwen 通義千問與 xAI Grok）對同一八字進行的初批草稿。
+你是一位權威八字命理與七政四餘的總審閱官，精通子平八字、《滴天髓徵義》、《造化元鑰》、《子平一得》、神峰通考、《鄭氏星案》、《果老星宗》與《星學大成》之「星平合參」工藝。
+以下是由三位命理 AI（DeepSeek、Qwen 通義千問與 xAI Grok）對同一八字與七政星盤進行的初批草稿。
 
 【審閱與嚴格修正要求】：
 1. 對比 DeepSeek、Qwen 與 Grok 的初批草稿，消除內部矛盾，確保用神與喜忌一貫，100% 遵照古典子平與內部法則。
@@ -521,7 +546,7 @@ ${ADMIN_REFERENCE_DOCS}
 18. 嚴禁使用朱雀橋派系裡面的任何理論。
 
 --------------------------------------------------
-【原八字排盤數據與內部規範】：
+【原命盤數據與內部規範】：
 ${formattedText}
 
 【初批草稿一 (DeepSeek)】：
@@ -535,8 +560,8 @@ ${draftGrok || '（xAI Grok 未回應）'}
 --------------------------------------------------
 `.trim();
 
-      // 優先調用 Gemini，若 gemini-4-argon 無回應則回退至 gemini-3.8-flash
-      const geminiModels = ['gemini-4-argon', 'gemini-3.8-flash', 'gemini-1.5-pro'];
+      // 調用 Gemini 官方最新標準模型代號
+      const geminiModels = ['gemini-1.5-pro', 'gemini-1.5-flash'];
 
       for (const model of geminiModels) {
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
@@ -563,7 +588,7 @@ ${draftGrok || '（xAI Grok 未回應）'}
             if (text && text.trim() !== '') {
               finalReport = text;
               geminiUsed = true;
-              console.log(`✅ Gemini (${model}) 大師終極校訂成功！`);
+              console.log(`✅ Gemini (${model}) 終極審閱成功！`);
               break;
             }
           } else {
@@ -579,7 +604,7 @@ ${draftGrok || '（xAI Grok 未回應）'}
     }
 
     if (!finalReport) {
-      finalReport = draftDeepseek || draftQwen || draftGrok || '未取得分析結果，請檢視 API 金鑰與點數設定。';
+      finalReport = draftDeepseek || draftQwen || draftGrok || '未取得分析結果，請檢視 API 金鑰與網絡連線。';
     }
 
     return NextResponse.json({
