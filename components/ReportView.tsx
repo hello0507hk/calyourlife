@@ -31,7 +31,10 @@ export interface LuckRef {
 
 const JSON_BLOCK = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/g;
 
-function splitReport(raw: string): { markdown: string; data: ReportScores | null } {
+const WRAPPING_FENCE = /^\s*```(?:markdown|md)?\s*\n([\s\S]*?)\n```\s*$/;
+
+function splitReport(input: string): { markdown: string; data: ReportScores | null } {
+  const raw = input.replace(WRAPPING_FENCE, '$1');
   const blocks = [...raw.matchAll(JSON_BLOCK)];
   for (let i = blocks.length - 1; i >= 0; i--) {
     try {
@@ -76,6 +79,10 @@ const MD: Components = {
       <table className="w-full min-w-[420px] text-left text-[13px]">{children}</table>
     </div>
   ),
+  pre: ({ children }) => (
+    <pre className="my-3 whitespace-pre-wrap break-words rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-[13px] leading-relaxed text-slate-300">{children}</pre>
+  ),
+  code: ({ children }) => <code className="whitespace-pre-wrap break-words font-sans">{children}</code>,
   thead: ({ children }) => <thead className="bg-slate-800/60 text-amber-200">{children}</thead>,
   th: ({ children }) => <th className="px-3 py-2 font-semibold">{children}</th>,
   td: ({ children }) => <td className="border-t border-slate-800 px-3 py-2 text-slate-300">{children}</td>,
@@ -215,7 +222,7 @@ export default function ReportView({
     <div className="flex flex-col gap-4">
       {data && <ReportCharts type={type} data={data} luck={luck} targetYear={targetYear} />}
 
-      <article className="prose-report rounded-xl border border-slate-800 bg-slate-950/50 p-4 sm:p-5">
+      <article className="prose-report min-w-0 break-words rounded-xl border border-slate-800 bg-slate-950/50 p-4 sm:p-5">
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>
           {markdown}
         </ReactMarkdown>

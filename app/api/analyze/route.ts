@@ -256,9 +256,134 @@ function scoreBlockSpec(type: string, dayyun: any[] = []) {
 ${shape}`;
 }
 
+// Vercel maxDuration 為 300 秒：初批須於 150 秒內收結，餘下時間留給總審閱
+const DRAFT_BUDGET_MS = 150_000;
+const TOTAL_BUDGET_MS = 285_000;
+const DRAFT_MAX_TOKENS = 8192;
+const FINAL_MAX_TOKENS = 32768;
+
+interface StreamResult {
+  text: string;
+  finish: string;
+}
+
+const EMPTY_RESULT: StreamResult = { text: '', finish: 'error' };
+
+const isTruncated = (r: StreamResult) => ['length', 'MAX_TOKENS', 'timeout'].includes(r.finish);
+
+type SSEExtract = (json: any) => { text?: string; finish?: string };
+
+const openAIExtract: SSEExtract = (j) => ({
+  text: j.choices?.[0]?.delta?.content ?? undefined,
+  finish: j.choices?.[0]?.finish_reason ?? undefined,
+});
+
+const geminiExtract: SSEExtract = (j) => {
+  const c = j.candidates?.[0];
+  return {
+    text: (c?.content?.parts ?? []).filter((p: any) => !p.thought).map((p: any) => p.text ?? '').join(''),
+    finish: c?.finishReason ?? undefined,
+  };
+};
+
+// 以串流方式讀取回應：到達時限便中止，但保留已生成的文字
+async function streamSSE(
+  url: string,
+  init: RequestInit,
+  deadline: number,
+  extract: SSEExtract,
+  label: string,
+  errors: Record<string, string>
+): Promise<StreamResult> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), Math.max(1000, deadline - Date.now()));
+  let text = '';
+  let finish = '';
+  try {
+    const res = await fetch(url, { ...init, signal: ctrl.signal });
+    if (!res.ok || !res.body) {
+      errors[label] = `HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`;
+      return EMPTY_RESULT;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const payload = trimmed.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+        try {
+          const r = extract(JSON.parse(payload));
+          if (r.text) text += r.text;
+          if (r.finish) finish = r.finish;
+        } catch {
+          // 非 JSON 的心跳行
+        }
+      }
+    }
+  } catch (err: any) {
+    if (ctrl.signal.aborted) {
+      finish = 'timeout';
+      if (!text) errors[label] = '超出時限';
+    } else {
+      errors[label] = `網路異常: ${err.message}`;
+      if (!text) finish = 'error';
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+  return { text, finish };
+}
+
+async function streamChat(
+  label: string,
+  url: string,
+  key: string,
+  models: string[],
+  system: string,
+  user: string,
+  deadline: number,
+  errors: Record<string, string>
+): Promise<StreamResult> {
+  for (const model of models) {
+    if (Date.now() > deadline - 5000) break;
+    const r = await streamSSE(
+      url,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify({
+          model,
+          temperature: 0.0,
+          max_tokens: DRAFT_MAX_TOKENS,
+          stream: true,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+        }),
+      },
+      deadline,
+      openAIExtract,
+      `${label}(${model})`,
+      errors
+    );
+    if (r.text.trim()) return r;
+  }
+  return EMPTY_RESULT;
+}
+
 // API Route 主入口
 export async function POST(req: Request) {
   const executionErrors: Record<string, string> = {};
+  const startedAt = Date.now();
 
   try {
     const { type = 'deep', baziData, userNotes, targetYear = 2026, question } = await req.json();
@@ -456,221 +581,50 @@ ${QIZHENG_REFERENCE_DOCS}`;
     initialSystemPrompt += scoreSpec;
 
     // ==================================================================
-    // 第一階段：DeepSeek + Qwen + Grok 三 AI 平行同步初批 (Promise.all)
+    // 第一階段：DeepSeek + Qwen + Grok 三 AI 平行同步初批
     // ==================================================================
+    const draftDeadline = startedAt + DRAFT_BUDGET_MS;
+    const finalDeadline = startedAt + TOTAL_BUDGET_MS;
+    const callDraft = (label: string, url: string, key: string, models: string[]) =>
+      streamChat(label, url, key, models, initialSystemPrompt, userPromptText, draftDeadline, executionErrors);
 
-    // 1.1 DeepSeek 初批 (使用 deepseek-chat 旗艦通用模型)
-    const deepseekPromise = fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      signal: AbortSignal.timeout(280000),
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${deepseekKey}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        temperature: 0.0,
-        top_p: 0.1,
-        messages: [
-          { role: 'system', content: initialSystemPrompt },
-          { role: 'user', content: userPromptText },
-        ],
-      }),
-    }).then(async (res) => {
-      if (!res.ok) {
-        const err = await res.text();
-        executionErrors['DeepSeek'] = `HTTP ${res.status}: ${err}`;
-        return null;
-      }
-      return res.json();
-    }).catch((err) => {
-      executionErrors['DeepSeek'] = `網路異常: ${err.message}`;
-      return null;
-    });
+    const deepseekPromise = callDraft('DeepSeek', 'https://api.deepseek.com/chat/completions', deepseekKey, ['deepseek-chat']);
 
-    // 1.2 Qwen 初批 (優先調用 qwen-max)
-    let qwenPromise: Promise<any> = Promise.resolve(null);
+    let qwenPromise: Promise<StreamResult> = Promise.resolve(EMPTY_RESULT);
     if (dashscopeKey) {
-      qwenPromise = fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
-        method: 'POST',
-        signal: AbortSignal.timeout(280000),
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${dashscopeKey}`,
-        },
-        body: JSON.stringify({
-          model: 'qwen-max',
-          temperature: 0.0,
-          messages: [
-            { role: 'system', content: initialSystemPrompt },
-            { role: 'user', content: userPromptText },
-          ],
-        }),
-      }).then(async (res) => {
-        if (!res.ok) {
-          const err = await res.text();
-          executionErrors['Qwen(DashScope)'] = `HTTP ${res.status}: ${err}`;
-          return null;
-        }
-        return res.json();
-      }).catch((err) => {
-        executionErrors['Qwen(DashScope)'] = `網路異常: ${err.message}`;
-        return null;
-      });
+      qwenPromise = callDraft('Qwen(DashScope)', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', dashscopeKey, ['qwen-max']);
     } else if (openrouterKey) {
-      qwenPromise = fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        signal: AbortSignal.timeout(280000),
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${openrouterKey}`,
-        },
-        body: JSON.stringify({
-          model: 'qwen/qwen-2.5-72b-instruct',
-          temperature: 0.0,
-          messages: [
-            { role: 'system', content: initialSystemPrompt },
-            { role: 'user', content: userPromptText },
-          ],
-        }),
-      }).then(async (res) => {
-        if (!res.ok) {
-          const err = await res.text();
-          executionErrors['Qwen(OpenRouter)'] = `HTTP ${res.status}: ${err}`;
-          return null;
-        }
-        return res.json();
-      }).catch((err) => {
-        executionErrors['Qwen(OpenRouter)'] = `網路異常: ${err.message}`;
-        return null;
-      });
+      qwenPromise = callDraft('Qwen(OpenRouter)', 'https://openrouter.ai/api/v1/chat/completions', openrouterKey, ['qwen/qwen-2.5-72b-instruct']);
     } else {
       executionErrors['Qwen'] = '未設定 QWEN_API_KEY 或 OPENROUTER_API_KEY';
     }
 
-    // 1.3 Grok 初批 (調用 grok-2 / grok-2-latest)
-    let grokPromise: Promise<any> = Promise.resolve(null);
-    const preferredXaiModels = ['grok-2-latest', 'grok-2'];
-    const preferredOpenRouterModels = ['x-ai/grok-2'];
-
-    if (xaiKey) {
+    let grokPromise: Promise<StreamResult> = Promise.resolve(EMPTY_RESULT);
+    if (xaiKey || openrouterKey) {
       grokPromise = (async () => {
-        for (const modelName of preferredXaiModels) {
-          try {
-            const res = await fetch('https://api.x.ai/v1/chat/completions', {
-              method: 'POST',
-              signal: AbortSignal.timeout(280000),
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${xaiKey}`,
-              },
-              body: JSON.stringify({
-                model: modelName,
-                temperature: 0.0,
-                messages: [
-                  { role: 'system', content: initialSystemPrompt },
-                  { role: 'user', content: userPromptText },
-                ],
-              }),
-            });
-
-            if (res.ok) {
-              return await res.json();
-            } else {
-              const errText = await res.text();
-              executionErrors[`Grok(${modelName})`] = `HTTP ${res.status}: ${errText}`;
-            }
-          } catch (err: any) {
-            executionErrors[`Grok(${modelName})`] = `網路異常: ${err.message}`;
-          }
+        if (xaiKey) {
+          const r = await callDraft('Grok', 'https://api.x.ai/v1/chat/completions', xaiKey, ['grok-2-latest', 'grok-2']);
+          if (r.text.trim()) return r;
         }
-
-        if (openrouterKey) {
-          for (const orModel of preferredOpenRouterModels) {
-            try {
-              const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                method: 'POST',
-                signal: AbortSignal.timeout(280000),
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${openrouterKey}`,
-                },
-                body: JSON.stringify({
-                  model: orModel,
-                  temperature: 0.0,
-                  messages: [
-                    { role: 'system', content: initialSystemPrompt },
-                    { role: 'user', content: userPromptText },
-                  ],
-                }),
-              });
-
-              if (res.ok) {
-                return await res.json();
-              } else {
-                const errText = await res.text();
-                executionErrors[`Grok(OpenRouter:${orModel})`] = `HTTP ${res.status}: ${errText}`;
-              }
-            } catch (err: any) {
-              executionErrors[`Grok(OpenRouter:${orModel})`] = `網路異常: ${err.message}`;
-            }
-          }
-        }
-
-        return null;
-      })();
-    } else if (openrouterKey) {
-      grokPromise = (async () => {
-        for (const orModel of preferredOpenRouterModels) {
-          try {
-            const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-              method: 'POST',
-              signal: AbortSignal.timeout(280000),
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${openrouterKey}`,
-              },
-              body: JSON.stringify({
-                model: orModel,
-                temperature: 0.0,
-                messages: [
-                  { role: 'system', content: initialSystemPrompt },
-                  { role: 'user', content: userPromptText },
-                ],
-              }),
-            });
-
-            if (res.ok) {
-              return await res.json();
-            } else {
-              const errText = await res.text();
-              executionErrors[`Grok(OpenRouter:${orModel})`] = `HTTP ${res.status}: ${errText}`;
-            }
-          } catch (err: any) {
-            executionErrors[`Grok(OpenRouter:${orModel})`] = `網路異常: ${err.message}`;
-          }
-        }
-        return null;
+        if (openrouterKey) return callDraft('Grok(OpenRouter)', 'https://openrouter.ai/api/v1/chat/completions', openrouterKey, ['x-ai/grok-2']);
+        return EMPTY_RESULT;
       })();
     } else {
       executionErrors['Grok'] = '未設定 XAI_API_KEY / GROK_API_KEY 或 OPENROUTER_API_KEY';
     }
 
-    // 三模型平行同時執行
-    const [deepseekData, qwenData, grokData] = await Promise.all([
-      deepseekPromise,
-      qwenPromise,
-      grokPromise,
-    ]);
+    const [deepseekResult, qwenResult, grokResult] = await Promise.all([deepseekPromise, qwenPromise, grokPromise]);
 
-    const draftDeepseek = deepseekData?.choices?.[0]?.message?.content || '';
-    const draftQwen = qwenData?.choices?.[0]?.message?.content || '';
-    const draftGrok = grokData?.choices?.[0]?.message?.content || '';
+    const draftText = (r: StreamResult) => (r.text.trim() && isTruncated(r) ? `${r.text}\n\n（此初稿因長度或時限中斷，未完部分請審閱時補全）` : r.text);
+    const draftDeepseek = draftText(deepseekResult);
+    const draftQwen = draftText(qwenResult);
+    const draftGrok = draftText(grokResult);
 
     // ==================================================================
     // 第二階段：Google Gemini 大師終極校訂與總審閱
     // ==================================================================
     let finalReport = '';
+    let finalTruncated = false;
     let geminiUsed = false;
 
     if (geminiKey) {
@@ -718,43 +672,40 @@ ${draftGrok || '（xAI Grok 未回應）'}
 --------------------------------------------------
 `.trim();
 
-      // 調用 Gemini 官方最新標準模型代號
-      const geminiModels = ['gemini-1.5-pro', 'gemini-1.5-flash'];
+      // 時間不足時先用較快的 flash 模型，確保在伺服器時限內完成
+      const proFirst = finalDeadline - Date.now() > 110_000;
+      const geminiModels = proFirst
+        ? ['gemini-2.5-pro', 'gemini-pro-latest', 'gemini-2.5-flash', 'gemini-flash-latest']
+        : ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-pro'];
 
       for (const model of geminiModels) {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
-        try {
-          const geminiResponse = await fetch(geminiUrl, {
+        if (Date.now() > finalDeadline - 10_000) break;
+        const r = await streamSSE(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${geminiKey}`,
+          {
             method: 'POST',
-            signal: AbortSignal.timeout(280000),
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              contents: [{ parts: [{ text: geminiPrompt }] }],
+              contents: [{ role: 'user', parts: [{ text: geminiPrompt }] }],
               safetySettings: [
                 { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
                 { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
                 { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
                 { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
               ],
-              generationConfig: { temperature: 0.0 },
+              generationConfig: { temperature: 0.0, maxOutputTokens: FINAL_MAX_TOKENS },
             }),
-          });
-
-          if (geminiResponse.ok) {
-            const geminiData = await geminiResponse.json();
-            const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text && text.trim() !== '') {
-              finalReport = text;
-              geminiUsed = true;
-              console.log(`✅ Gemini (${model}) 終極審閱成功！`);
-              break;
-            }
-          } else {
-            const err = await geminiResponse.text();
-            executionErrors[`Gemini(${model})`] = `HTTP ${geminiResponse.status}: ${err}`;
-          }
-        } catch (err: any) {
-          executionErrors[`Gemini(${model})`] = `網路異常: ${err.message}`;
+          },
+          finalDeadline,
+          geminiExtract,
+          `Gemini(${model})`,
+          executionErrors
+        );
+        if (r.text.trim()) {
+          finalReport = r.text;
+          finalTruncated = isTruncated(r);
+          geminiUsed = true;
+          break;
         }
       }
     } else {
@@ -762,7 +713,13 @@ ${draftGrok || '（xAI Grok 未回應）'}
     }
 
     if (!finalReport) {
-      finalReport = draftDeepseek || draftQwen || draftGrok || '未取得分析結果，請檢視 API 金鑰與網絡連線。';
+      const best = [deepseekResult, qwenResult, grokResult].filter((r) => r.text.trim()).sort((a, b) => b.text.length - a.text.length)[0];
+      finalReport = best?.text || '未取得分析結果，請檢視 API 金鑰與網絡連線。';
+      finalTruncated = !!best && isTruncated(best);
+    }
+
+    if (finalTruncated) {
+      finalReport += '\n\n---\n\n> 本報告因篇幅或伺服器時限未能完整生成，請稍後按「重新生成」再試。';
     }
 
     return NextResponse.json({
@@ -774,6 +731,7 @@ ${draftGrok || '（xAI Grok 未回應）'}
         qwenUsed: !!draftQwen,
         grokUsed: !!draftGrok,
         geminiUsed: geminiUsed,
+        truncated: finalTruncated,
         errors: executionErrors,
       },
     });
