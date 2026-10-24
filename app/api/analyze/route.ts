@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ADMIN_REFERENCE_DOCS } from '@/lib/adminKnowledge';
 import { QIZHENG_REFERENCE_DOCS } from '@/lib/qizhengKnowledge';
+import { calculateQizheng, ZODIAC_BRANCHES } from '@/lib/qizheng';
 
 // 1. 強制動態獲取環境變數，禁止靜態快取
 export const dynamic = 'force-dynamic';
@@ -123,7 +124,10 @@ function buildBaziText(baziData: any, userNotes?: string) {
 
     const housesText = qizhengData.houses
       ? qizhengData.houses
-          .map((h: any) => `  * ${h.name}（${h.branch}宮・${h.zodiacSign}・宮主${h.ruler}）：${h.stars?.length ? h.stars.join('、') : '空宮'}${h.shensha?.length ? `；神煞：${h.shensha.join(' ')}` : ''}`)
+          .map((h: any) => {
+            const limit = typeof h.limitStartAge === 'number' ? `；大限 ${h.limitStartAge.toFixed(1)}–${h.limitEndAge.toFixed(1)}歲` : '';
+            return `  * ${h.name}（${h.branch}宮・${h.zodiacSign}・宮主${h.ruler}）：${h.stars?.length ? h.stars.join('、') : '空宮'}${h.shensha?.length ? `；神煞：${h.shensha.join(' ')}` : ''}${limit}`;
+          })
           .join('\n')
       : '無宮位數據';
 
@@ -172,6 +176,53 @@ ${dayyun
   .map((d: any) => `- ${d.ganZhi} 大運：${d.age}${d.endAge ? `–${d.endAge}` : ''}歲${d.startYear ? `（${d.startYear}–${d.endYear}年）` : ''}`)
   .join('\n')}
   `.trim();
+}
+
+// 原局深度解盤「當下流年運勢評語」所批之年份
+const DEEP_REPORT_YEAR = 2027;
+
+const TRANSIT_STARS = ['木', '土', '火', '羅', '計', '炁', '孛'];
+
+// 流年星曜過宮：取立春、年中、年底三個時點，列出行星落宮與逆行
+function yearlyTransitText(qz: any, year: number): string {
+  if (!qz?.birth || !qz?.houses) return '';
+  const houseOf = (lon: number) => {
+    const l = ((lon % 360) + 360) % 360;
+    const branch = ZODIAC_BRANCHES[Math.floor(l / 30)];
+    const house = qz.houses.find((h: any) => h.branch === branch);
+    const deg = l % 30;
+    return `${branch}宮${house ? `（${house.name}）` : ''}${Math.floor(deg)}°${String(Math.round((deg % 1) * 60)).padStart(2, '0')}′`;
+  };
+  try {
+    const points = [
+      { label: '立春', date: new Date(Date.UTC(year, 1, 4, 4)) },
+      { label: '年中', date: new Date(Date.UTC(year, 6, 1, 4)) },
+      { label: '年底', date: new Date(Date.UTC(year, 11, 31, 4)) },
+    ].map((p) => ({ ...p, stars: calculateQizheng({ ...qz.birth, now: p.date }).now.stars }));
+
+    const lines = TRANSIT_STARS.map((key) => {
+      const path = points
+        .map((p) => {
+          const s = p.stars.find((x: any) => x.key === key);
+          return s ? `${p.label} ${houseOf(s.longitude)}${s.isRetrograde ? '（逆）' : ''}` : '';
+        })
+        .filter(Boolean)
+        .join(' → ');
+      return `  * ${key}：${path}`;
+    });
+    return `- ${year} 年流年星曜過宮（立春 → 年中 → 年底）：\n${lines.join('\n')}`;
+  } catch {
+    return '';
+  }
+}
+
+// 指定年份所行之大限宮
+function limitHouseText(qz: any, year: number): string {
+  if (!qz?.birth || !qz?.houses) return '';
+  const birthYear = qz.birth.year + (qz.birth.month - 1) / 12;
+  const h = qz.houses.find((x: any) => year + 0.5 >= birthYear + x.limitStartAge && year + 0.5 < birthYear + x.limitEndAge);
+  if (!h) return '';
+  return `- ${year} 年所行大限：${h.name}（${h.branch}宮，${h.limitStartAge.toFixed(1)}–${h.limitEndAge.toFixed(1)}歲），宮內星曜：${h.stars?.length ? h.stars.join('、') : '空宮'}，宮主${h.ruler}`;
 }
 
 const MONTH_LABELS = ['寅月', '卯月', '辰月', '巳月', '午月', '未月', '申月', '酉月', '戌月', '亥月', '子月', '丑月'];
@@ -246,9 +297,13 @@ export async function POST(req: Request) {
     const targetLuck = (baziData?.dayyun || []).find(
       (d: any) => d.startYear && targetYear >= d.startYear && targetYear <= d.endYear
     );
+    const analysisYear = type === 'deep' ? DEEP_REPORT_YEAR : targetYear;
+    const qizhengYearText = [limitHouseText(baziData?.qizhengData, analysisYear), yearlyTransitText(baziData?.qizhengData, analysisYear)]
+      .filter(Boolean)
+      .join('\n');
     const formattedText = `${buildBaziText(baziData, userNotes)}${
       type !== 'deep' && targetLuck ? `\n\n【${targetYear} 年所行大運】：${targetLuck.ganZhi}（${targetLuck.startYear}–${targetLuck.endYear}年）` : ''
-    }`;
+    }${qizhengYearText ? `\n\n【${analysisYear} 年七政四餘流年數據】：\n${qizhengYearText}` : ''}`;
     const targetGanZhiStr = getYearGanZhi(targetYear);
 
     // 基於三大功能（deep / yearly / yearly_qa）動態選用系統提示詞與輸出格式規範
@@ -260,30 +315,68 @@ export async function POST(req: Request) {
 利用子平八字扶抑、調候、通關定格局與捉用神，同時對照七政四餘黃道十二宮（官祿宮、財帛宮、夫妻宮、疾厄宮等）、日月五星與四餘（羅睺、計都、紫氣、月孛）落宮狀態，互相印證。
 嚴禁使用朱鵲橋一派的任何理論，嚴禁修改干支或自行重新計算排盤。`;
 
+    const starPingDualRules = `【星平合參雙軌批算要求（每一部分都必須遵守）】：
+1. 每一個分析部分（性格、生活建議、出身家境與學業、事業、財運、感情婚姻、健康、大運、流年、問事）都必須分三層論述，並以粗體小標題分開：
+   - **子平八字**：引用具體干支、十神、藏干、刑沖合會、用神喜忌、大運流年作推斷；
+   - **七政四餘**：引用具體宮位、宮主、星曜（宮度、宿度、行度、廟旺、化曜）、神煞、大限及流年星曜過宮作推斷；
+   - **星平合參結論**：綜合兩者，明確標示【吉】、【凶】、【吉中藏凶】或【凶中藏吉】，並註明程度（大／中／小）。
+2. 嚴禁只論八字而略過星盤，亦嚴禁只論星盤而略過八字；兩者結論相異時，必須指出相異之處並說明取捨理由。
+3. 論吉：講明吉在何事、因何而吉、程度及應期（大運、年份或月份）。論凶：講明凶象為何、因何而凶、程度及應期，並給出具體可行的化解與趨避方法。
+4. 吉凶必須直言，不可含糊其詞或只報喜不報憂，亦不可誇大恐嚇；每一個斷語都必須有八字或星盤的具體依據。
+5. 以最專業、最詳細的態度講解，寧詳勿略。`;
+
     if (type === 'yearly') {
       initialSystemPrompt = `${baseExpertPersona}
 
-【分析任務】：請針對命主八字與七政四餘星盤進行【${targetGanZhiStr} 流年整體運勢解盤】。
+【分析任務】：請針對命主八字與七政四餘星盤進行【${targetGanZhiStr} 流年批算】。
 請務必結合命主的【現時職業】與【現時婚姻/感情狀態】進行深度的流年演繹與星平對照。
 
-請嚴格分成以下六部分，並以 Markdown 格式輸出：
-### 一、 流年整體運勢總評（流年 ${targetGanZhiStr} 干支對日主、大運及原局八字生剋，對照七政流年限路星曜）
-### 二、 事業與工作運勢推演（結合現時職業、八字官殺與七政【官祿宮】星曜分析轉職與升遷風險）
-### 三、 財運走勢與投資理財風險分析（對照八字財星與七政【財帛宮】受餘星侵擾或吉星加臨）
-### 四、 感情婚姻與人際關係吉凶（結合現時婚姻狀態、八字夫妻宮與七政【夫妻宮】主星推算）
-### 五、 健康狀況與安全注意事項（結合八字五行傾斜與七政【疾厄宮】星曜）
-### 六、 全年吉凶月份提醒與趨吉避凶錦囊`;
+${starPingDualRules}
 
-      userPromptText = `請幫我分析以下八字與七政四餘命盤在【${targetGanZhiStr}】的流年整體運勢：\n\n${formattedText}`;
+【必須參考文獻與指定批命規範】：
+--------------------------------------------------
+${ADMIN_REFERENCE_DOCS}
+--------------------------------------------------
+
+請嚴格分成以下六部分，並以 Markdown 格式輸出，每部分均須具備「子平八字／七政四餘／星平合參結論」三層：
+### 一、 流年整體運勢總評
+- 子平八字：流年 ${targetGanZhiStr} 干支對日主、用神、所行大運及原局四柱之生剋刑沖合會。
+- 七政四餘：該年所行大限宮位及宮主，流年星曜（木、土、火、羅、計、炁、孛）過命宮、身宮、大限宮及沖照命度之情況。
+### 二、 事業與工作運勢
+- 結合現時職業，八字官殺、印星、食傷之流年引動，對照七政【官祿宮】【遷移宮】宮主及流年星曜，分析升遷、轉職、創業之吉凶與應期。
+### 三、 財運與投資理財
+- 八字財星與比劫之流年變化，對照七政【財帛宮】【田宅宮】宮主、星曜及流年星曜，分析進財、破財、投資之吉凶與應期。
+### 四、 感情婚姻與人際關係
+- 結合現時婚姻狀態，八字夫妻宮、妻星／夫星之流年引動，對照七政【夫妻宮】【奴僕宮】【男女宮】星曜，分析桃花、婚姻、口舌之吉凶與應期。
+### 五、 健康與安全
+- 八字五行偏枯與流年沖剋，對照七政【疾厄宮】及受羅計孛火土侵擾之宮位，指出需注意之身體部位、意外與化解方法。
+### 六、 逐月吉凶與趨吉避凶錦囊
+- 以節氣月（寅月至丑月）逐月列出：八字流月干支之引動、七政流年星曜之變化（如有逆留轉向須註明），並標示每月【吉】【凶】與宜忌。`;
+
+      userPromptText = `請幫我批算以下八字與七政四餘命盤在【${targetGanZhiStr}】的流年運勢：\n\n${formattedText}`;
     } else if (type === 'yearly_qa') {
       initialSystemPrompt = `${baseExpertPersona}
 
 【分析任務】：請針對命主於【${targetGanZhiStr}】提出之特定問題【${question || '流年吉凶問事'}】進行【流年問事精準解答】。
 請結合命主的【現時職業】與【現時婚姻/感情狀態】，運用星平合參提供切合現實狀況的解答。
 
-請嚴格分成以下二部分，並以 Markdown 格式輸出：
-### 一、 針對問題之流年吉凶明確斷語（結合八字流年與七政宮位星曜直指好壞變動）
-### 二、 具體應對方針與趨吉避凶行動建議`;
+${starPingDualRules}
+
+【必須參考文獻與指定批命規範】：
+--------------------------------------------------
+${ADMIN_REFERENCE_DOCS}
+--------------------------------------------------
+
+請嚴格分成以下五部分，並以 Markdown 格式輸出：
+### 一、 問事吉凶總斷
+- 先以一兩句直接回答所問之事是【吉】、【凶】、【吉中藏凶】或【凶中藏吉】，以及成敗機率。
+### 二、 子平八字論斷
+- 找出所問之事對應的十神與宮位（例如問事業看官殺印、問財看財星、問感情看妻星／夫星與日支），分析原局、所行大運及流年 ${targetGanZhiStr} 如何引動，逐點講明吉在何處、凶在何處。
+### 三、 七政四餘星盤論斷
+- 找出所問之事對應的宮位（例如官祿、財帛、夫妻、疾厄、遷移），分析宮主、宮內星曜之廟旺化曜、該年所行大限及流年星曜過宮，逐點講明吉在何處、凶在何處。
+### 四、 星平合參綜合結論與應期
+- 綜合八字與星盤，說明兩者一致或相異之處，給出最終吉凶判斷、程度，以及最有利與最需提防的月份。
+### 五、 具體應對方針與趨吉避凶行動建議`;
 
       userPromptText = `命主針對【${targetGanZhiStr}】提出了具體提問：【${question || '流年吉凶問事'}】\n\n請結合以下命盤數據解答：\n\n${formattedText}`;
     } else {
@@ -305,6 +398,9 @@ export async function POST(req: Request) {
 3. 捉用神必須先參照《造化元鑰》十天干月令喜忌與《子平一得》命例，必須在原局八字中找出有用之神。
 4. 有殺先論殺：原局有殺星，必須優先論殺（殺弱以財滋殺，殺強以印化殺或食神制殺）。
 
+${starPingDualRules}
+（第一部分「日主旺衰、格局、用神、病藥」以子平八字為主；第二至第六部分必須完全符合上述雙軌要求。）
+
 【必須參考文獻與指定批命規範】：
 --------------------------------------------------
 ${ADMIN_REFERENCE_DOCS}
@@ -320,23 +416,31 @@ ${ADMIN_REFERENCE_DOCS}
 ### 二、 格局與十神性格分析
 - 必須依據之前的八字分析，說明原命局的主要格局、破局，或者是無格局 (參考內部參考法則，滴天髓徵義和子平一得中所提到的命例格局）。
 - 分析天干主星與地支藏干對命主性格、做事風格的影響。（可參考內部參考法則、滴天髓徵義中的性情篇和子平一得對性格和驛馬中的解釋對命主的影響）
+- 七政四餘：以命宮、命度、命主、度主、身宮所坐星曜及其廟旺、行度、化曜，論命主外貌氣質、性情與處事作風，並參看【相貌宮】【福德宮】。
+- 星平合參結論：列出性格上的優點（吉）與缺點（凶），並說明這些性格特質在人生中帶來的助力與阻力。
 
 ### 三、 五行喜忌與生活建議
-- 針對五行過旺或缺乏的項目，提供適合的行業方向、補運建議與心態調整。
+- 子平八字：針對五行過旺或缺乏的項目，按用神喜忌提供適合的行業方向、方位、顏色、補運建議與心態調整。
+- 七政四餘：按恩星（生命主、度主者）與仇星（剋命主、度主者）、星盤五行偏枯，以及失地或受剋之宮位，提出宜親近及宜避開之人、事、行業與環境。
+- 星平合參結論：分別列出有利（吉）與不利（凶）之生活選擇，並說明理由。
 
 ### 四、 分析命主的出身，事業，感情和健康
-- 結合命主的八字和七政四餘星盤作出詳盡分析
+- 結合命主的八字和七政四餘星盤作出詳盡分析，出身家境與學業、事業、感情、健康四項，每項均須具備「子平八字／七政四餘／星平合參結論」三層，並明確標示吉凶
+- 七政四餘看法：出身家境看【田宅宮】【福德宮】及命主得失，學業看【官祿宮】【遷移宮】及水星、木星；事業看【官祿宮】【財帛宮】【遷移宮】；感情看【夫妻宮】【男女宮】及日月、金星；健康看【疾厄宮】及受羅計孛火土侵擾之宮位
 - 利用原局八字，分析命主的出身，家境和學業成績。（參考內部參考法則、滴天髓徵義對格局的評論，子平一得蔡進源師傅的命例，留意驛馬星或八字四柱有沒有天尅地沖，如有，要留意命主有沒有出國讀書的機會，分析原局八字和大運對命主出身，家境和學業成績的影響。）
 - 分析命主的事業和工作情況。結合命主的【現時職業】，用原局八字配合大運，配合十神含意和生尅制化，詳細推斷和解釋那一個大運對命主最為有利和特別需要注意的地方，批算時一定要先參考內部法則，滴天髓徵義對格局的評論，子平一得蔡進源師傅評註中的命例，留意有沒有驛馬，如有驛馬，要留意命主會否有到國外工作之類的機會，推論大運有什麼事發生
 - 先確認【命主性別】是乾造（男）還是坤造（女），並結合【現時婚姻/感情狀態】。分析感情狀況時，直接以男命財星/女命官殺星確切論述，嚴禁寫「假設」。配合內部參考法則與滴天髓徵義女命篇，詳細解釋那一個時候最易有桃花和真姻緣出現，觀察妻星或夫星有沒有在大運或流年出現，或地支六合、會局或沖合夫妻宮。
+- 分析命主的健康狀況：以八字五行偏枯、受沖剋之干支，對照七政【疾厄宮】宮主及星曜，指出需注意之身體部位、易發病的時段與保健方法。
 
 ### 五、 選前 1個，後4個主要大運，詳細評估大運干支對原局用神的影響，跟據十神含意，批斷該大運否能會發生的吉事和凶事，並且提供解決方法
 - 參考提到所有精通的八字書藉和內部參考法則，詳細分析原局八字加大運配合流年對命主事業、感情、健康的影響，利用十神含意推論產生的象，詳細，專業和嚴謹地推斷和解釋有機會發生什麼事，是吉是凶，提供趨吉避凶的方法，以 point form 形式列出
+- 七政四餘：每個大運均須對照同一歲數範圍所行之大限宮位（見十二宮位的大限歲數），以該宮宮主、宮內星曜之廟旺化曜論吉凶，並與大運結論互相印證，標示該段運程【吉】【凶】。
 
 ### 六、 當下流年運勢評語
-- 利用日主所輸入的出生日期，結合八字命盤和七政四餘，配合大運及流年，利用十神含意，生尅制化，各星宿的生尅，詳細推斷對命主該年流年運勢的影響，包括吉凶、變化與可能的發展方向，並提供趨吉避凶的方法，只需要2027的流年，不需要其他年份
+- 利用日主所輸入的出生日期，結合八字命盤和七政四餘，配合大運及流年，利用十神含意，生尅制化，各星宿的生尅，詳細推斷對命主該年流年運勢的影響，包括吉凶、變化與可能的發展方向，並提供趨吉避凶的方法，只需要${DEEP_REPORT_YEAR}的流年，不需要其他年份
+- 七政四餘部分必須引用資料中【${DEEP_REPORT_YEAR} 年七政四餘流年數據】的所行大限及流年星曜過宮，分事業、財運、感情、健康逐項講明吉凶。
 
-語氣請保持客觀、理性且富有建設性，避免過度武斷或誇大災禍。`;
+語氣請保持客觀、專業、詳盡；吉凶必須直言並說明依據，不可只報喜不報憂，亦不可誇大恐嚇，並為每一項凶象提供化解方法。`;
 
       userPromptText = `請幫我分析以下八字與七政四餘命盤數據，進行【原局深度解盤】：\n\n${formattedText}`;
     }
@@ -593,7 +697,8 @@ ${QIZHENG_REFERENCE_DOCS}`;
 16. 用字盡量淺易，令一般人容易明白，減少使用專業用語，避免使用過於深奧的詞彙，但仍需要保持專業，嚴謹和詳細的態度。
 17. 每個新段落要用分隔線隔開，使人容易閱讀和理解。
 18. 嚴禁使用朱雀橋派系裡面的任何理論。
-19. 綜合三份初稿末尾的 JSON 評分，按你審定後的結論校正數值，並依下列要求在最終報告末尾輸出唯一一個 JSON 區塊：${scoreSpec}
+19. 逐一檢查每個部分（性格、生活建議、出身、事業、財運、感情、健康、大運、流年、問事）是否同時具備「子平八字」、「七政四餘」及「星平合參結論」三層論述，並有明確的【吉】【凶】判斷、程度、應期與化解方法；如有任何部分欠缺星盤或八字論述、吉凶含糊，必須以最專業詳細的態度補寫完整。
+20. 綜合三份初稿末尾的 JSON 評分，按你審定後的結論校正數值，並依下列要求在最終報告末尾輸出唯一一個 JSON 區塊：${scoreSpec}
 
 --------------------------------------------------
 【原命盤數據與內部規範】：

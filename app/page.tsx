@@ -493,19 +493,16 @@ function BaziForm({
             {trueSolar === 'on' && <SelectField label="出生地" value={longitude} onChange={setLongitude} options={LOCATION_OPTIONS} />}
           </div>
 
-          <details className="group rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5 [&_summary::-webkit-details-marker]:hidden">
-            <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-medium text-slate-300">
-              背景資料（選填，令 AI 批算更貼身）
-              <ChevronDown className="size-4 text-slate-500 transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="mt-3 flex flex-col gap-3">
-              <label className="flex w-full flex-col gap-1.5">
-                <span className="text-xs font-medium text-slate-400">現時職業</span>
-                <input value={occupation} onChange={(e) => setOccupation(e.target.value)} placeholder="例如：IT、金融、創業..." className={INPUT_CLASS} />
-              </label>
-              <SelectField label="感情／婚姻狀態" value={maritalStatus} onChange={setMaritalStatus} options={MARITAL_OPTIONS} />
+          <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+            <div className="text-xs font-medium text-slate-300">
+              背景資料<span className="ml-1 text-slate-500">（選填，令 AI 批算更貼身）</span>
             </div>
-          </details>
+            <label className="flex w-full flex-col gap-1.5">
+              <span className="text-xs font-medium text-slate-400">現時職業</span>
+              <input value={occupation} onChange={(e) => setOccupation(e.target.value)} placeholder="例如：IT、金融、創業..." className={INPUT_CLASS} />
+            </label>
+            <SelectField label="感情／婚姻狀態" value={maritalStatus} onChange={setMaritalStatus} options={MARITAL_OPTIONS} />
+          </div>
 
           <button
             type="submit"
