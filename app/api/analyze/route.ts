@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ADMIN_REFERENCE_DOCS } from '@/lib/adminKnowledge';
+import { QIZHENG_REFERENCE_DOCS } from '@/lib/qizhengKnowledge';
 
 // 1. 強制動態獲取環境變數，禁止靜態快取
 export const dynamic = 'force-dynamic';
@@ -340,6 +341,13 @@ ${ADMIN_REFERENCE_DOCS}
       userPromptText = `請幫我分析以下八字與七政四餘命盤數據，進行【原局深度解盤】：\n\n${formattedText}`;
     }
 
+    if (baziData?.qizhengData) {
+      initialSystemPrompt += `
+
+【七政四餘星盤批算必須參考文獻】（凡涉及星盤、宮位、星曜、大限、流年星曜之論斷，必須依據以下法則）：
+${QIZHENG_REFERENCE_DOCS}`;
+    }
+
     const scoreSpec = scoreBlockSpec(type, baziData?.dayyun);
     initialSystemPrompt += scoreSpec;
 
@@ -590,7 +598,10 @@ ${ADMIN_REFERENCE_DOCS}
 --------------------------------------------------
 【原命盤數據與內部規範】：
 ${formattedText}
-
+${baziData?.qizhengData ? `
+【七政四餘星盤批算法則（審閱星盤論斷時必須逐條核對，初稿如有違反須修正）】：
+${QIZHENG_REFERENCE_DOCS}
+` : ''}
 【初批草稿一 (DeepSeek)】：
 ${draftDeepseek || '（DeepSeek 未回應）'}
 
