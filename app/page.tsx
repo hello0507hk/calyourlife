@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { calculateBazi } from '@/lib/bazi';
 import { calculateQizheng, QizhengChart } from '@/lib/qizheng';
 import QizhengChartSVG from '@/components/QizhengChartSVG';
+import { QizhengGods, QizhengHouseGrid, QizhengStarTable, QizhengSummary } from '@/components/QizhengDataPanel';
 import {
   ChevronDown,
   Compass,
@@ -268,6 +269,17 @@ const LOCATION_OPTIONS = [
   { value: '103.81', label: '新加坡 (東經 103.81°)' },
 ];
 
+const LOCATION_LATITUDE: Record<string, number> = {
+  '114.17': 22.32,
+  '113.54': 22.2,
+  '121.50': 25.03,
+  '116.40': 39.9,
+  '121.47': 31.23,
+  '113.26': 23.13,
+  '114.05': 22.54,
+  '103.81': 1.35,
+};
+
 const MARITAL_OPTIONS = [
   { value: '單身未婚', label: '單身未婚' },
   { value: '有穩定伴侶（未婚）', label: '有穩定伴侶（未婚）' },
@@ -475,66 +487,68 @@ function FourPillars({ pillars, trueSolarText }: { pillars: Pillar[]; trueSolarT
 /* 七政四餘視覺化容器 (呼叫 components/QizhengChartSVG)                 */
 /* ------------------------------------------------------------------ */
 
+const QIZHENG_VIEWS = [
+  { id: 'svg', label: '星盤', icon: Eye },
+  { id: 'grid', label: '十二宮', icon: Grid },
+  { id: 'table', label: '星曜資料', icon: Star },
+] as const;
+
 function QizhengSection({ data }: { data: QizhengChart }) {
-  const [viewMode, setViewMode] = useState<'svg' | 'grid'>('svg');
+  const [viewMode, setViewMode] = useState<(typeof QIZHENG_VIEWS)[number]['id']>('svg');
 
   return (
     <section className="rounded-2xl border border-amber-500/30 bg-slate-900/90 p-5 shadow-xl">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="inline-flex size-6 items-center justify-center rounded-md bg-amber-500/20 text-amber-400">
             <Star className="size-4" />
           </span>
-          <h3 className="font-serif text-base font-medium text-slate-100">七政四餘天象星盤 (星平合參)</h3>
+          <h3 className="font-serif text-base font-medium text-slate-100">七政四餘星盤（果老星宗 · Moira 制）</h3>
         </div>
 
         <div className="flex items-center gap-1 rounded-lg bg-slate-950 p-1 border border-slate-800">
-          <button
-            type="button"
-            onClick={() => setViewMode('svg')}
-            className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${
-              viewMode === 'svg' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Eye className="size-3.5" /> 渾天星盤
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('grid')}
-            className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${
-              viewMode === 'grid' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Grid className="size-3.5" /> 十二宮格
-          </button>
+          {QIZHENG_VIEWS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setViewMode(id)}
+              className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                viewMode === id ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Icon className="size-3.5" /> {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {viewMode === 'svg' ? (
-        <QizhengChartSVG data={data} />
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-          {data.houses.map((house, idx) => (
-            <div key={idx} className="border border-slate-800 bg-slate-950/60 p-2.5 rounded-xl flex flex-col justify-between min-h-[85px]">
-              <div className="flex justify-between items-center font-bold">
-                <span className={house.name === '命宮' ? 'text-amber-300 font-extrabold' : 'text-slate-200'}>{house.name}</span>
-                <span className="text-slate-500 text-[10px]">{house.branch}</span>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1">
-                {house.stars.length > 0 ? (
-                  house.stars.map((star) => (
-                    <span key={star} className="bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 rounded text-[10px]">
-                      {star}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-slate-600 text-[10px]">無主星</span>
-                )}
+      <div className="flex flex-col gap-3">
+        <QizhengSummary data={data} />
+
+        {viewMode === 'svg' && (
+          <>
+            <div className="overflow-x-auto rounded-xl border border-amber-900/40">
+              <div className="min-w-[640px]">
+                <QizhengChartSVG data={data} />
               </div>
             </div>
-          ))}
-        </div>
-      )}
+            <p className="text-[11px] leading-relaxed text-slate-400">
+              由內至外：地支・卦・宮主 → 黃道宮 → 十二宮（紅為命宮、藍為身宮）→ <span className="text-blue-400">流年星曜</span> → 二十八宿（今制距星）→
+              <span className="text-emerald-400"> 本命七政四餘</span>（紅圈為逆／留／伏／蝕）→ <span className="text-violet-400">流年神煞</span> →
+              <span className="text-emerald-400"> 本命神煞</span> → 大限年份（紅線為當前行限）。滑鼠停留星曜可看度數。
+            </p>
+          </>
+        )}
+
+        {viewMode === 'grid' && <QizhengHouseGrid data={data} />}
+
+        {viewMode === 'table' && (
+          <>
+            <QizhengStarTable data={data} />
+            <QizhengGods data={data} />
+          </>
+        )}
+      </div>
     </section>
   );
 }
@@ -654,15 +668,17 @@ export default function Page() {
         formData.gender, Number(formData.minute), formData.trueSolar === 'on', Number(formData.longitude)
       );
 
-      // ✅ 已修正：精確傳入 (年, 月, 日, 時, 分, 經度) 6 個參數
-      const qizheng = calculateQizheng(
-        Number(formData.year),
-        Number(formData.month),
-        Number(formData.day),
-        Number(formData.hour),
-        Number(formData.minute),
-        Number(formData.longitude)
-      );
+      const qizheng = calculateQizheng({
+        year: Number(formData.year),
+        month: Number(formData.month),
+        day: Number(formData.day),
+        hour: Number(formData.hour),
+        minute: Number(formData.minute),
+        longitude: Number(formData.longitude),
+        latitude: LOCATION_LATITUDE[formData.longitude] ?? 22.32,
+        timezone: 8,
+        trueSolar: formData.trueSolar === 'on',
+      });
 
       setBaziData({
         ...result,

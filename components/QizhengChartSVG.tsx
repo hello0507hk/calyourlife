@@ -1,356 +1,360 @@
 'use client';
 
-import React, { useState } from 'react';
-import { QizhengChart } from '@/lib/qizheng';
-import { SlidersHorizontal, Sparkles } from 'lucide-react';
+import React from 'react';
+import type { QizhengChart } from '@/lib/qizheng';
+import { ZODIAC_BRANCHES, ZODIAC_EN, ZODIAC_RULERS, ZODIAC_TRIGRAMS } from '@/lib/qizheng';
 
-interface TooltipInfo {
-  x: number;
-  y: number;
-  title: string;
-  badge?: string;
-  badgeColor?: string;
-  lines: { label: string; value: string }[];
+const SIZE = 800;
+const C = SIZE / 2;
+const R = 380;
+
+/** Moira full chart 環位（半徑比例） */
+const RING = {
+  center: 0.1 * R,
+  palace: 0.22 * R,
+  sign: 0.28 * R,
+  house: 0.34 * R,
+  now: 0.43 * R,
+  tickA: 0.45 * R,
+  mansion: 0.51 * R,
+  tickB: 0.53 * R,
+  birth: 0.62 * R,
+  nowShensha: 0.77 * R,
+  shensha: 0.92 * R,
+  years: 0.95 * R,
+  limit: R,
+};
+
+const COLOR = {
+  bg: '#fffdf6',
+  line: '#3b3b3b',
+  faint: '#b9b2a2',
+  text: '#1f1f1f',
+  star: '#0b7a2c',
+  retro: '#d11a1a',
+  now: '#1d4fd8',
+  shensha: '#0f6b2a',
+  nowShensha: '#7b3fb3',
+  ming: '#c81e1e',
+  shen: '#1d4fd8',
+  mansionLine: '#6b4a2b',
+};
+
+const CN_NUM = ['〇', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十', '廿一', '廿二', '廿三', '廿四', '廿五', '廿六', '廿七', '廿八', '廿九', '三十', '卅一', '卅二', '卅三'];
+
+/** 黃經 → 螢幕角：子在下、午在上、卯在左、酉在右 */
+const toTheta = (lon: number) => ((lon - 45) * Math.PI) / 180;
+const polar = (r: number, lon: number): [number, number] => {
+  const t = toTheta(lon);
+  return [C + r * Math.cos(t), C - r * Math.sin(t)];
+};
+
+function radial(lon: number, r1: number, r2: number) {
+  const [x1, y1] = polar(r1, lon);
+  const [x2, y2] = polar(r2, lon);
+  return { x1, y1, x2, y2 };
 }
 
-export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
-  const [showAspects, setShowAspects] = useState<boolean>(true);
-  const [tooltip, setTooltip] = useState<TooltipInfo | null>(null);
-
-  const size = 680;
-  const center = size / 2;
-
-  const rInner = 45;
-  const rZodiac = 110;
-  const rHouse = 160;
-  const rStars = 208;
-  const rMansion = 250;
-  const rShensha = 295;
-  const rOuterYears = 330;
-
-  const ZODIAC_SECTORS = [
-    { branch: '戌', code: 'Ari', sign: '白羊', minDeg: 0, maxDeg: 30 },
-    { branch: '酉', code: 'Tau', sign: '金牛', minDeg: 30, maxDeg: 60 },
-    { branch: '申', code: 'Gem', sign: '雙子', minDeg: 60, maxDeg: 90 },
-    { branch: '未', code: 'Can', sign: '巨蟹', minDeg: 90, maxDeg: 120 },
-    { branch: '午', code: 'Leo', sign: '獅子', minDeg: 120, maxDeg: 150 },
-    { branch: '巳', code: 'Vir', sign: '處女', minDeg: 150, maxDeg: 180 },
-    { branch: '辰', code: 'Lib', sign: '天秤', minDeg: 180, maxDeg: 210 },
-    { branch: '卯', code: 'Sco', sign: '天蠍', minDeg: 210, maxDeg: 240 },
-    { branch: '寅', code: 'Sag', sign: '射手', minDeg: 240, maxDeg: 270 },
-    { branch: '丑', code: 'Cap', sign: '摩羯', minDeg: 270, maxDeg: 300 },
-    { branch: '子', code: 'Aqu', sign: '水瓶', minDeg: 300, maxDeg: 330 },
-    { branch: '亥', code: 'Pis', sign: '雙魚', minDeg: 330, maxDeg: 360 },
-  ];
-
-  const STAR_COLORS: Record<string, { fill: string; stroke: string; halo: string }> = {
-    太陽: { fill: '#fbbf24', stroke: '#f59e0b', halo: 'rgba(251, 191, 36, 0.4)' },
-    太陰: { fill: '#e0f2fe', stroke: '#38bdf8', halo: 'rgba(56, 189, 248, 0.4)' },
-    木星: { fill: '#34d399', stroke: '#10b981', halo: 'rgba(52, 211, 153, 0.4)' },
-    火星: { fill: '#f87171', stroke: '#ef4444', halo: 'rgba(248, 113, 113, 0.4)' },
-    土星: { fill: '#fbbf24', stroke: '#d97706', halo: 'rgba(217, 119, 6, 0.4)' },
-    金星: { fill: '#f1f5f9', stroke: '#cbd5e1', halo: 'rgba(241, 245, 249, 0.4)' },
-    水星: { fill: '#60a5fa', stroke: '#3b82f6', halo: 'rgba(96, 165, 250, 0.4)' },
-    羅睺: { fill: '#c084fc', stroke: '#a855f7', halo: 'rgba(192, 132, 252, 0.4)' },
-    計都: { fill: '#f472b6', stroke: '#ec4899', halo: 'rgba(244, 114, 182, 0.4)' },
-    月孛: { fill: '#38bdf8', stroke: '#0284c7', halo: 'rgba(56, 189, 248, 0.4)' },
-    紫氣: { fill: '#a7f3d0', stroke: '#059669', halo: 'rgba(167, 243, 208, 0.4)' },
-  };
-
-  const getCoords = (longitude: number, radius: number) => {
-    const screenAngleDeg = 405 - longitude;
-    const rad = (screenAngleDeg * Math.PI) / 180;
-    return {
-      x: center + radius * Math.cos(rad),
-      y: center + radius * Math.sin(rad),
-    };
-  };
-
-  const processedStars = (data.stars || []).map((star, idx, arr) => {
-    let currentR = rStars;
-    for (let i = 0; i < idx; i++) {
-      const diff = Math.abs(star.longitude - arr[i].longitude);
-      if (diff < 8 || diff > 352) {
-        currentR -= 18;
+function spreadAngles(angles: number[], minSep: number): number[] {
+  const n = angles.length;
+  if (n < 2) return [...angles];
+  const order = angles.map((a, i) => ({ a, i })).sort((p, q) => p.a - q.a);
+  const pos = order.map((o) => o.a);
+  for (let iter = 0; iter < 200; iter++) {
+    let moved = false;
+    for (let k = 0; k < n; k++) {
+      const next = (k + 1) % n;
+      let gap = pos[next] - pos[k];
+      if (next === 0) gap += 360;
+      if (gap < minSep) {
+        const push = (minSep - gap) / 2;
+        pos[k] -= push;
+        pos[next] += push;
+        moved = true;
       }
     }
-    const coords = getCoords(star.longitude, currentR);
-    return { ...star, x: coords.x, y: coords.y, r: currentR };
-  });
+    if (!moved) break;
+  }
+  const out = new Array<number>(n);
+  order.forEach((o, k) => (out[o.i] = pos[k]));
+  return out;
+}
 
-  const mingBranch = data.mingGong ? data.mingGong.slice(0, 1) : '辰';
+interface ColumnPlacement {
+  x: number;
+  y: number;
+  text: string;
+  fontSize: number;
+}
 
-  const handleMouseMove = (e: React.MouseEvent<SVGElement>, info: Omit<TooltipInfo, 'x' | 'y'>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    setTooltip({
-      ...info,
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    });
-  };
+/** 神煞直書：每項兩字成一直行，沿宮弧排列，必要時分多圈 */
+function layoutColumns(items: string[], rInner: number, rOuter: number, lonStart: number, fontSize: number): ColumnPlacement[] {
+  if (items.length === 0) return [];
+  const theta = toTheta(lonStart + 15);
+  const sin = Math.abs(Math.sin(theta));
+  const cos = Math.abs(Math.cos(theta));
+  for (let fs = fontSize; fs >= 6; fs -= 0.5) {
+    const w = fs * 1.15;
+    const h = fs * 2.15;
+    const extT = w * sin + h * cos;
+    const extR = w * cos + h * sin;
+    const rows = Math.max(1, Math.floor((rOuter - rInner - 4) / extR));
+    const layout: ColumnPlacement[] = [];
+    let idx = 0;
+    for (let j = 0; j < rows && idx < items.length; j++) {
+      const r = rOuter - 2 - extR * (j + 0.5);
+      const arc = (r * Math.PI * 28) / 180;
+      const cap = Math.max(1, Math.floor(arc / extT));
+      const take = Math.min(cap, items.length - idx);
+      for (let k = 0; k < take; k++) {
+        const lon = lonStart + 30 - 1 - (28 * (k + 0.5)) / take;
+        const [x, y] = polar(r, lon);
+        layout.push({ x, y, text: items[idx++], fontSize: fs });
+      }
+    }
+    if (idx >= items.length) return layout;
+  }
+  return [];
+}
+
+function VerticalText({ x, y, text, fontSize, fill, weight }: { x: number; y: number; text: string; fontSize: number; fill: string; weight?: number }) {
+  const chars = Array.from(text);
+  const startY = y - ((chars.length - 1) * fontSize * 1.02) / 2;
+  return (
+    <g fill={fill} fontSize={fontSize} fontWeight={weight} textAnchor="middle" dominantBaseline="central">
+      {chars.map((ch, i) => (
+        <text key={i} x={x} y={startY + i * fontSize * 1.02}>
+          {ch}
+        </text>
+      ))}
+    </g>
+  );
+}
+
+const degreeText = (deg: number) => `${CN_NUM[Math.floor(deg)] ?? Math.floor(deg)}度`;
+
+export default function QizhengChartSVG({ data }: { data: QizhengChart }) {
+  const mingStart = Math.floor(data.ming.longitude / 30) * 30;
+  const shenStart = Math.floor(data.shen.longitude / 30) * 30;
+  const birthYearFrac = data.birth.year + (data.birth.month - 1) / 12;
+
+  const birthAngles = spreadAngles(data.stars.map((s) => s.longitude), 6.2);
+  const nowAngles = spreadAngles(data.now.stars.map((s) => s.longitude), 7.5);
+  const mansionCenters = data.mansions.map((m) => m.start + m.width / 2);
+  const mansionAngles = spreadAngles(mansionCenters, 4.4);
+
+  const currentLimit = data.houses.find((h) => data.now.age >= h.limitStartAge && data.now.age < h.limitEndAge);
+  const limitLon = (house: (typeof data.houses)[number], age: number) =>
+    house.zodiacIndex * 30 + 30 - (30 * (age - house.limitStartAge)) / (house.limitEndAge - house.limitStartAge);
 
   return (
-    <div className="relative flex flex-col items-center justify-center rounded-2xl border border-amber-500/30 bg-slate-950 p-4 shadow-2xl overflow-hidden selection:bg-amber-500/30">
-      <div className="mb-3 flex w-full items-center justify-between px-2 text-xs">
-        <div className="flex items-center gap-2 text-amber-300 font-bold">
-          <Sparkles className="size-4 text-amber-400" />
-          <span>果老星宗 · 七政四餘渾天星盤</span>
-        </div>
+    <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="h-auto w-full select-none" style={{ fontFamily: '"Songti TC","Noto Serif TC","PMingLiU",serif' }}>
+      <rect x={0} y={0} width={SIZE} height={SIZE} fill={COLOR.bg} />
 
-        <button
-          type="button"
-          onClick={() => setShowAspects(!showAspects)}
-          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1 font-bold transition-all ${
-            showAspects
-              ? 'border-amber-500/80 bg-amber-500/20 text-amber-300'
-              : 'border-slate-800 bg-slate-900 text-slate-500'
-          }`}
-        >
-          <SlidersHorizontal className="size-3.5" />
-          {showAspects ? '相位連線：開啟' : '相位連線：關閉'}
-        </button>
-      </div>
+      {/* 命宮、身宮底色 */}
+      {[{ start: mingStart, fill: '#fde2e2' }, { start: shenStart, fill: '#dde7fd' }].map(({ start, fill }, i) => {
+        const [ax, ay] = polar(RING.house, start);
+        const [bx, by] = polar(RING.house, start + 30);
+        const [cx2, cy2] = polar(RING.sign, start + 30);
+        const [dx, dy] = polar(RING.sign, start);
+        return (
+          <path
+            key={i}
+            d={`M${ax},${ay} A${RING.house},${RING.house} 0 0 0 ${bx},${by} L${cx2},${cy2} A${RING.sign},${RING.sign} 0 0 1 ${dx},${dy} Z`}
+            fill={fill}
+            opacity={i === 1 && shenStart === mingStart ? 0 : 1}
+          />
+        );
+      })}
 
-      <div className="relative w-full max-w-[640px] aspect-square flex items-center justify-center">
-        <svg
-          viewBox={`0 0 ${size} ${size}`}
-          className="w-full h-full select-none font-serif"
-          onMouseLeave={() => setTooltip(null)}
-        >
-          <defs>
-            <linearGradient id="ringGold" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#fef3c7" />
-              <stop offset="50%" stopColor="#f59e0b" />
-              <stop offset="100%" stopColor="#78350f" />
-            </linearGradient>
+      {/* 同心圓 */}
+      <g fill="none" stroke={COLOR.line}>
+        {[RING.center, RING.palace, RING.sign, RING.house, RING.now, RING.mansion, RING.birth, RING.nowShensha, RING.shensha, RING.years, RING.limit].map((r) => (
+          <circle key={r} cx={C} cy={C} r={r} strokeWidth={r === RING.limit || r === RING.house ? 1.4 : 0.9} />
+        ))}
+        {[RING.tickA, RING.tickB].map((r) => (
+          <circle key={r} cx={C} cy={C} r={r} strokeWidth={0.6} stroke={COLOR.faint} />
+        ))}
+      </g>
 
-            <filter id="starGlow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="3" result="coloredBlur" />
-              <feMerge>
-                <feMergeNode in="coloredBlur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
+      {/* 十二宮分界 */}
+      <g stroke={COLOR.line} strokeWidth={0.9}>
+        {Array.from({ length: 12 }, (_, i) => i * 30).map((lon) => (
+          <g key={lon}>
+            <line {...radial(lon, RING.center, RING.now)} />
+            <line {...radial(lon, RING.birth, RING.limit)} />
+            <line {...radial(lon, RING.tickA, RING.tickB)} strokeWidth={0.5} stroke={COLOR.faint} />
+            <line {...radial(lon, RING.tickB, RING.birth)} strokeWidth={0.6} stroke={COLOR.faint} strokeDasharray="3 3" />
+          </g>
+        ))}
+      </g>
 
-          {/* 1. 同心圓 */}
-          <circle cx={center} cy={center} r={rOuterYears} stroke="url(#ringGold)" strokeWidth="1.5" fill="none" opacity="0.7" />
-          <circle cx={center} cy={center} r={rShensha} stroke="#3b82f6" strokeWidth="1" strokeDasharray="2, 3" fill="none" opacity="0.4" />
-          <circle cx={center} cy={center} r={rMansion} stroke="url(#ringGold)" strokeWidth="1" fill="none" opacity="0.6" />
-          <circle cx={center} cy={center} r={rStars} stroke="#f59e0b" strokeWidth="0.8" strokeDasharray="1, 4" fill="none" opacity="0.3" />
-          <circle cx={center} cy={center} r={rHouse} stroke="url(#ringGold)" strokeWidth="1.5" fill="none" opacity="0.8" />
-          <circle cx={center} cy={center} r={rZodiac} stroke="url(#ringGold)" strokeWidth="1" fill="none" opacity="0.5" />
-          <circle cx={center} cy={center} r={rInner} stroke="url(#ringGold)" strokeWidth="1.5" fill="#020617" opacity="0.9" />
+      {/* 度數刻度 */}
+      <g stroke={COLOR.faint}>
+        {Array.from({ length: 360 }, (_, d) => (
+          <g key={d}>
+            <line {...radial(d, RING.tickA - (d % 5 === 0 ? 5 : 2.5), RING.tickA)} strokeWidth={d % 5 === 0 ? 0.8 : 0.5} />
+            <line {...radial(d, RING.mansion, RING.mansion + (d % 5 === 0 ? 5 : 2.5))} strokeWidth={d % 5 === 0 ? 0.8 : 0.5} />
+          </g>
+        ))}
+      </g>
 
-          {/* 2. 第一環：地支與黃道宮 */}
-          {ZODIAC_SECTORS.map((sector) => {
-            const midDeg = (sector.minDeg + sector.maxDeg) / 2;
-            const p1 = getCoords(sector.minDeg, rInner);
-            const p2 = getCoords(sector.minDeg, rOuterYears);
-            const pos = getCoords(midDeg, (rInner + rZodiac) / 2);
-            const isMing = sector.branch === mingBranch;
+      {/* 地支・卦・宮主 */}
+      {ZODIAC_BRANCHES.map((branch, z) => {
+        const lon = z * 30 + 15;
+        const [x1, y1] = polar(RING.center + 11, lon);
+        const [x2, y2] = polar((RING.center + RING.palace) / 2 + 1, lon);
+        const [x3, y3] = polar(RING.palace - 10, lon);
+        const [ex, ey] = polar((RING.palace + RING.sign) / 2, lon);
+        return (
+          <g key={branch} textAnchor="middle" dominantBaseline="central">
+            <text x={x1} y={y1} fontSize={15} fontWeight={700} fill={COLOR.text}>{branch}</text>
+            <text x={x2} y={y2} fontSize={12} fill="#555">{ZODIAC_TRIGRAMS[z]}</text>
+            <text x={x3} y={y3} fontSize={13} fill={COLOR.star}>{ZODIAC_RULERS[z]}</text>
+            <text x={ex} y={ey} fontSize={10} fill="#666" fontFamily="Georgia,serif">{ZODIAC_EN[z]}</text>
+          </g>
+        );
+      })}
 
-            return (
-              <g key={sector.branch}>
-                <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="#78350f" strokeWidth="1" opacity="0.3" />
-                <text
-                  x={pos.x}
-                  y={pos.y - 6}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fill={isMing ? '#fef3c7' : '#f59e0b'}
-                  fontSize="11"
-                  fontWeight="bold"
-                >
-                  {sector.branch}
-                </text>
-                <text
-                  x={pos.x}
-                  y={pos.y + 7}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fill="#38bdf8"
-                  fontSize="8.5"
-                >
-                  {sector.code} ({sector.sign})
-                </text>
-              </g>
-            );
-          })}
+      {/* 十二宮名 */}
+      {data.houses.map((h) => {
+        const [x, y] = polar((RING.sign + RING.house) / 2, h.zodiacIndex * 30 + 15);
+        const isMing = h.index === 0;
+        return (
+          <text
+            key={h.name}
+            x={x}
+            y={y}
+            fontSize={12}
+            fontWeight={isMing ? 800 : 600}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill={isMing ? COLOR.ming : h.isShen ? COLOR.shen : COLOR.text}
+          >
+            {h.name}
+          </text>
+        );
+      })}
 
-          {/* 3. 第二環：動態後天十二宮 */}
-          {(data.houses || []).map((house) => {
-            const branchChar = house.branch.slice(0, 1);
-            const sector = ZODIAC_SECTORS.find(s => s.branch === branchChar) || ZODIAC_SECTORS[0];
-            const midDeg = (sector.minDeg + sector.maxDeg) / 2;
-            const pos = getCoords(midDeg, (rZodiac + rHouse) / 2);
-            const isMing = house.name === '命宮';
-
-            return (
-              <g key={house.name}>
-                {isMing && (
-                  <circle cx={pos.x} cy={pos.y} r="16" fill="#f59e0b" opacity="0.3" />
-                )}
-                <text
-                  x={pos.x}
-                  y={pos.y}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fill={isMing ? '#fef3c7' : '#e2e8f0'}
-                  fontSize="11"
-                  fontWeight={isMing ? 'bold' : 'medium'}
-                >
-                  {house.name}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* 4. 第三環：今制二十八宿 */}
-          {(data.mansions || []).map((m, idx) => {
-            const pos = getCoords(m.startDeg + m.span / 2, (rHouse + rMansion) / 2);
-            const line1 = getCoords(m.startDeg, rHouse);
-            const line2 = getCoords(m.startDeg, rMansion);
-
-            return (
-              <g key={idx}>
-                <line x1={line1.x} y1={line1.y} x2={line2.x} y2={line2.y} stroke="#f59e0b" strokeWidth="0.5" opacity="0.4" />
-                <text
-                  x={pos.x}
-                  y={pos.y}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fill="#34d399"
-                  fontSize="9"
-                  fontWeight="bold"
-                >
-                  {m.name.slice(0, 1)}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* 5. 動態星曜點位 */}
-          {processedStars.map((star) => {
-            const style = STAR_COLORS[star.name] || { fill: '#e2e8f0', stroke: '#94a3b8', halo: 'rgba(226, 232, 240, 0.3)' };
-            const lineToCenter = getCoords(star.longitude, rInner);
-
-            return (
-              <g
-                key={star.name}
-                className="cursor-pointer group"
-                onMouseMove={(e) => {
-                  e.stopPropagation();
-                  handleMouseMove(e, {
-                    title: `${star.name} (${star.type === '政' ? '七政' : '四餘'})`,
-                    badge: star.isRetrograde ? '逆行 ⟲' : '順行',
-                    badgeColor: star.isRetrograde ? '#ef4444' : '#10b981',
-                    lines: [
-                      { label: '黃道經度', value: `${star.longitude}°` },
-                      { label: '落宮', value: star.zodiac },
-                      { label: '二十八宿', value: `${star.mansion} (${star.mansionDegree}°)` },
-                    ],
-                  });
-                }}
-                onMouseLeave={() => setTooltip(null)}
-              >
-                <line
-                  x1={lineToCenter.x}
-                  y1={lineToCenter.y}
-                  x2={star.x}
-                  y2={star.y}
-                  stroke={style.stroke}
-                  strokeWidth="1"
-                  strokeDasharray="2, 3"
-                  opacity="0.5"
-                />
-
-                <circle cx={star.x} cy={star.y} r="10" fill={style.halo} filter="url(#starGlow)" className="transition-all duration-300 group-hover:r-15" />
-
-                <circle
-                  cx={star.x}
-                  cy={star.y}
-                  r="4.5"
-                  fill={style.fill}
-                  stroke={style.stroke}
-                  strokeWidth="1.5"
-                  className="transition-transform duration-300 group-hover:scale-150"
-                />
-
-                <text
-                  x={star.x}
-                  y={star.y - 10}
-                  textAnchor="middle"
-                  fill="#f8fafc"
-                  fontSize="9.5"
-                  fontWeight="bold"
-                  className="drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]"
-                >
-                  {star.name}
-                  {star.isRetrograde ? '⟲' : ''}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* 6. 動態圓心命宮與身宮標籤 */}
-          <g transform={`translate(${center}, ${center})`}>
-            <circle cx="0" cy="0" r="32" fill="#020617" stroke="url(#ringGold)" strokeWidth="1" />
-            <text x="0" y="-6" textAnchor="middle" fill="#f59e0b" fontSize="9.5" fontWeight="bold">
-              {data.mingGong ? data.mingGong.split(' ')[0] : '命宮'}
-            </text>
-            <text x="0" y="8" textAnchor="middle" fill="#38bdf8" fontSize="8">
-              {data.shenGong ? data.shenGong.split(' ')[0] : '身宮'}
+      {/* 流年星曜 */}
+      {data.now.stars.map((s, i) => {
+        const [gx, gy] = polar(RING.house + 17, nowAngles[i]);
+        return (
+          <g key={`now-${s.key}`}>
+            <line {...radial(s.longitude, RING.tickA - 6, RING.tickA)} stroke={COLOR.now} strokeWidth={1.2} />
+            <line x1={polar(RING.tickA - 6, s.longitude)[0]} y1={polar(RING.tickA - 6, s.longitude)[1]} x2={polar(RING.house + 27, nowAngles[i])[0]} y2={polar(RING.house + 27, nowAngles[i])[1]} stroke={COLOR.now} strokeWidth={0.5} opacity={0.6} />
+            <text x={gx} y={gy} fontSize={12.5} textAnchor="middle" dominantBaseline="central" fill={s.isRetrograde ? COLOR.retro : COLOR.now}>
+              <title>{`流年 ${s.key} ${s.longitude.toFixed(2)}°${s.isRetrograde ? ' 逆' : ''}`}</title>
+              {s.key}
             </text>
           </g>
-        </svg>
+        );
+      })}
 
-        {/* 左下角動態真太陽時與雙主資訊 */}
-        <div className="absolute bottom-3 left-3 rounded-xl border border-amber-500/40 bg-slate-900/90 p-2.5 text-[11px] font-mono text-amber-200 backdrop-blur shadow-lg">
-          <div className="font-bold text-amber-400">真太陽時: {data.trueSolarTime || '12:00'}</div>
-          <div className="text-slate-300 mt-0.5">命宮主: {data.mingGongZhu || '金星'} · 命度主: {data.mingDuZhu || '木星'}</div>
-        </div>
+      {/* 二十八宿 */}
+      <g>
+        {data.mansions.map((m, i) => {
+          const [tx, ty] = polar((RING.tickA + RING.mansion) / 2, mansionAngles[i]);
+          return (
+            <g key={m.name}>
+              <line {...radial(m.start, RING.now, RING.tickB)} stroke={COLOR.mansionLine} strokeWidth={0.9} />
+              <text x={tx} y={ty} fontSize={12.5} fontWeight={600} textAnchor="middle" dominantBaseline="central" fill="#5a3412">
+                <title>{`${m.name}${m.element}宿：起 ${m.start.toFixed(2)}°，寬 ${m.width.toFixed(2)}°`}</title>
+                {m.name}
+              </text>
+            </g>
+          );
+        })}
+      </g>
 
-        {/* Hover Tooltip */}
-        {tooltip && (
-          <div
-            className="pointer-events-none absolute z-50 flex flex-col gap-1.5 rounded-xl border border-amber-500/40 bg-slate-900/95 p-3 text-xs text-slate-100 shadow-2xl backdrop-blur-md transition-all duration-75"
-            style={{
-              left: `${Math.min(tooltip.x + 12, 380)}px`,
-              top: `${Math.min(tooltip.y + 12, 440)}px`,
-            }}
-          >
-            <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-1.5">
-              <span className="font-serif font-bold text-amber-300 text-sm">{tooltip.title}</span>
-              {tooltip.badge && (
-                <span
-                  className="rounded px-1.5 py-0.5 text-[9px] font-bold text-slate-950"
-                  style={{ backgroundColor: tooltip.badgeColor || '#f59e0b' }}
-                >
-                  {tooltip.badge}
-                </span>
-              )}
-            </div>
+      {/* 本命七政四餘 */}
+      {data.stars.map((s, i) => {
+        const angle = birthAngles[i];
+        const [gx, gy] = polar((RING.tickB + RING.birth) / 2 + 1, angle);
+        const [lx, ly] = polar(RING.tickB + 4, angle);
+        const [px, py] = polar(RING.tickB, s.longitude);
+        const marked = s.state === '逆' || s.state === '留' || s.state === '伏' || s.state === '蝕';
+        return (
+          <g key={s.key}>
+            <line {...radial(s.longitude, RING.mansion, RING.tickB)} stroke={COLOR.retro} strokeWidth={1.4} />
+            <line x1={px} y1={py} x2={lx} y2={ly} stroke={COLOR.star} strokeWidth={0.6} />
+            {marked && <circle cx={gx} cy={gy} r={10} fill="none" stroke={COLOR.retro} strokeWidth={1} />}
+            <text x={gx} y={gy} fontSize={16} fontWeight={700} textAnchor="middle" dominantBaseline="central" fill={s.state === '逆' ? COLOR.retro : COLOR.star}>
+              <title>
+                {`${s.name}（${s.key}）\n${s.branch}宮 ${s.degreeInSign}　${s.mansion}宿 ${s.mansionDegree}\n${s.state || '—'} ${s.dignity.join('')}${s.huaYao.length ? `\n化曜：${s.huaYao.join('、')}` : ''}\n落${s.house}`}
+              </title>
+              {s.key}
+            </text>
+            {s.state && s.state !== '順' && (
+              <text x={gx + 10} y={gy - 9} fontSize={8.5} textAnchor="middle" dominantBaseline="central" fill={COLOR.retro}>
+                {s.state}
+              </text>
+            )}
+          </g>
+        );
+      })}
 
-            <div className="flex flex-col gap-1">
-              {tooltip.lines.map((line, idx) => (
-                <div key={idx} className="flex justify-between gap-4 text-[11px]">
-                  <span className="text-slate-400">{line.label}：</span>
-                  <span className="font-medium text-slate-200">{line.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      {/* 流年神煞、本命神煞 */}
+      {data.houses.map((h) => {
+        const start = h.zodiacIndex * 30;
+        const nowCols = layoutColumns(h.nowShensha, RING.birth, RING.nowShensha, start, 10);
+        const birthCols = layoutColumns(h.shensha, RING.nowShensha, RING.shensha, start, 11);
+        return (
+          <g key={`ss-${h.name}`}>
+            {nowCols.map((c, i) => (
+              <VerticalText key={`n${i}`} x={c.x} y={c.y} text={c.text} fontSize={c.fontSize} fill={COLOR.nowShensha} />
+            ))}
+            {birthCols.map((c, i) => (
+              <VerticalText key={`b${i}`} x={c.x} y={c.y} text={c.text} fontSize={c.fontSize} fill={COLOR.shensha} />
+            ))}
+          </g>
+        );
+      })}
 
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-4 text-[11px] text-slate-400">
-        <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-amber-400" /> 太陽/土星</span>
-        <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-sky-300" /> 太陰/月孛</span>
-        <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-emerald-400" /> 木星/紫氣</span>
-        <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-red-400" /> 火星</span>
-        <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-purple-400" /> 羅睺/計都</span>
-      </div>
-    </div>
+      {/* 大限：逐年刻度與起限年份 */}
+      {data.houses.map((h) => {
+        const ticks: number[] = [];
+        for (let age = Math.ceil(h.limitStartAge); age < h.limitEndAge; age++) ticks.push(age);
+        const boundary = h.zodiacIndex * 30 + 30;
+        const [yx, yy] = polar((RING.years + RING.limit) / 2, boundary);
+        return (
+          <g key={`lim-${h.name}`}>
+            {ticks.map((age) => (
+              <line key={age} {...radial(limitLon(h, age), RING.shensha, RING.shensha + (age % 5 === 0 ? 7 : 4))} stroke={COLOR.line} strokeWidth={0.6} />
+            ))}
+            <rect x={yx - 15} y={yy - 7} width={30} height={14} fill={COLOR.bg} />
+            <text x={yx} y={yy} fontSize={10} textAnchor="middle" dominantBaseline="central" fill={COLOR.text} fontFamily="Georgia,serif">
+              <title>{`${h.name}限：${h.limitStartAge.toFixed(1)}–${h.limitEndAge.toFixed(1)} 歲`}</title>
+              {Math.floor(birthYearFrac + h.limitStartAge)}
+            </text>
+          </g>
+        );
+      })}
+      {currentLimit && (
+        <g>
+          <line {...radial(limitLon(currentLimit, data.now.age), RING.shensha - 4, RING.limit)} stroke={COLOR.retro} strokeWidth={2} />
+          <circle cx={polar(RING.limit, limitLon(currentLimit, data.now.age))[0]} cy={polar(RING.limit, limitLon(currentLimit, data.now.age))[1]} r={3.5} fill={COLOR.retro} />
+        </g>
+      )}
+
+      {/* 命度標記 */}
+      <line {...radial(data.ming.longitude, RING.house, RING.limit)} stroke={COLOR.ming} strokeWidth={1.2} strokeDasharray="4 3" opacity={0.75} />
+
+      {/* 中宮 */}
+      <g textAnchor="middle" dominantBaseline="central">
+        <text x={C} y={C - 21} fontSize={10} fill={COLOR.text}>
+          立命
+        </text>
+        <text x={C} y={C - 7} fontSize={12.5} fontWeight={700} fill={COLOR.ming}>
+          {`${data.ming.mansion}${degreeText(data.mingDuDegree)}`}
+        </text>
+        <text x={C} y={C + 8} fontSize={10.5} fill={COLOR.text}>
+          {`${data.ming.degreeRuler}度命`}
+        </text>
+        <text x={C} y={C + 22} fontSize={9.5} fill={COLOR.shen}>
+          {`身${data.shen.mansion}${degreeText(parseFloat(data.shen.mansionDegree))}`}
+        </text>
+      </g>
+    </svg>
   );
 }
