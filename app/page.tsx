@@ -737,6 +737,14 @@ function yearGanZhi(year: number) {
 
 type AnalysisType = 'deep' | 'yearly' | 'yearly_qa';
 
+interface ReportState {
+  text: string;
+  year?: number;
+  question?: string;
+  resume?: unknown;
+  error?: string;
+}
+
 const ANALYSIS_TABS = [
   { id: 'deep', label: '深度解盤', icon: WandSparkles },
   { id: 'yearly', label: '流年批算', icon: CalendarDays },
@@ -756,7 +764,7 @@ function AiLoading() {
     <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
       <div className="flex items-center gap-2 text-xs text-amber-300">
         <LogoMark size={22} animated />
-        多個 AI 模型正在會診，約需 1–3 分鐘，請勿關閉頁面…
+        多個 AI 模型正在會診，約需 3–10 分鐘，請勿關閉頁面…
       </div>
       {[90, 75, 82, 60].map((w, i) => (
         <div key={i} className="h-3 animate-pulse rounded bg-slate-800" style={{ width: `${w}%` }} />
@@ -772,12 +780,13 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
   const [activeTab, setActiveTab] = useState<AnalysisType>('deep');
   const [targetYear, setTargetYear] = useState(thisYear);
   const [question, setQuestion] = useState('');
-  const [reports, setReports] = useState<Record<AnalysisType, { text: string; year?: number }>>({
+  const [reports, setReports] = useState<Record<AnalysisType, ReportState>>({
     deep: { text: '' },
     yearly: { text: '' },
     yearly_qa: { text: '' },
   });
   const [loadingTab, setLoadingTab] = useState<AnalysisType | null>(null);
+  const [continuing, setContinuing] = useState(false);
 
   const yearLuck = luck.find((p) => targetYear >= p.startYear && targetYear <= p.endYear);
   const yearLabel = `${targetYear} ${yearGanZhi(targetYear)}年`;
@@ -790,23 +799,59 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
     setLoadingTab(type);
     setReports((r) => ({ ...r, [type]: { text: '' } }));
     try {
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type,
-          baziData,
-          userNotes: '',
-          ...(type !== 'deep' && { targetYear }),
-          ...(type === 'yearly_qa' && { question: q }),
-        }),
-      });
-      const data = await res.json();
-      setReports((r) => ({ ...r, [type]: { text: data.result || data.error || '無法生成報告。', year: targetYear } }));
+      const data = await requestReport(type, targetYear, q);
+      setReports((r) => ({
+        ...r,
+        [type]: {
+          text: data.result || data.error || '無法生成報告。',
+          year: targetYear,
+          question: q,
+          resume: data.meta?.resume ?? undefined,
+        },
+      }));
     } catch {
       setReports((r) => ({ ...r, [type]: { text: '請求發送失敗，請檢查網絡連線。' } }));
     } finally {
       setLoadingTab(null);
+    }
+  };
+
+  const requestReport = async (type: AnalysisType, year: number, q: string, resume?: unknown) => {
+    const res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type,
+        baziData,
+        userNotes: '',
+        ...(type !== 'deep' && { targetYear: year }),
+        ...(type === 'yearly_qa' && { question: q }),
+        ...(resume ? { resume } : {}),
+      }),
+    });
+    return res.json();
+  };
+
+  const handleContinue = async (type: AnalysisType) => {
+    const current = reports[type];
+    if (loadingTab || !current.resume) return;
+    setLoadingTab(type);
+    setContinuing(true);
+    try {
+      const data = await requestReport(type, current.year ?? targetYear, current.question ?? '', current.resume);
+      if (data.result) {
+        setReports((r) => ({
+          ...r,
+          [type]: { ...current, text: data.result, resume: data.meta?.resume ?? undefined, error: undefined },
+        }));
+      } else {
+        setReports((r) => ({ ...r, [type]: { ...current, error: data.error || '續寫失敗，請再試一次。' } }));
+      }
+    } catch {
+      setReports((r) => ({ ...r, [type]: { ...current, error: '請求發送失敗，請檢查網絡連線。' } }));
+    } finally {
+      setLoadingTab(null);
+      setContinuing(false);
     }
   };
 
@@ -904,14 +949,33 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
           </p>
         )}
 
-        {loading && <AiLoading />}
-        {report.text && !loading && (
+        {loading && !continuing && <AiLoading />}
+        {report.text && (!loading || continuing) && (
           <ReportView
             type={activeTab}
             report={report.text}
             targetYear={report.year}
             luck={luck.map(({ ganZhi, startYear, endYear, current }) => ({ ganZhi, startYear, endYear, current }))}
           />
+        )}
+        {report.resume != null && report.text && (!loading || continuing) && (
+          <div className="flex flex-col gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 print:hidden">
+            <p className="text-xs leading-relaxed text-amber-200/90">
+              {continuing
+                ? 'Gemini 正在接續撰寫餘下章節，完成後會自動接在上方報告之後，請勿關閉頁面…'
+                : '報告尚未全部寫完。可先閱讀以上章節，看完後按下方按鈕生成餘下部分。'}
+            </p>
+            {report.error && !continuing && <p className="text-xs text-red-300">{report.error}</p>}
+            <button
+              type="button"
+              onClick={() => handleContinue(activeTab)}
+              disabled={!!loadingTab}
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/60 bg-slate-950 text-sm font-bold text-amber-300 transition-colors hover:bg-amber-500/10 disabled:opacity-60"
+            >
+              {continuing ? <LogoMark size={18} animated /> : <ArrowRight className="size-4" />}
+              {continuing ? '正在生成餘下報告…' : '繼續生成餘下報告'}
+            </button>
+          </div>
         )}
       </div>
     </SectionCard>
@@ -925,8 +989,8 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
 const NAV_ITEMS = [
   { id: 'form', label: '資料', icon: User },
   { id: 'bazi', label: '八字', icon: LayoutGrid },
-  { id: 'qizheng', label: '星盤', icon: Star },
   { id: 'luck', label: '大運', icon: TrendingUp },
+  { id: 'qizheng', label: '星盤', icon: Star },
   { id: 'ai', label: '會診', icon: Sparkles },
 ];
 
@@ -1041,9 +1105,9 @@ export default function Page() {
             {baziData ? (
               <>
                 <FourPillars pillars={pillars} bazi={baziData} />
+                <LuckSection luck={luck} qiyunText={baziData.qiyunText} />
                 <ChartOverview bazi={baziData} />
                 {baziData.qizhengData && <QizhengSection data={baziData.qizhengData} />}
-                <LuckSection luck={luck} qiyunText={baziData.qiyunText} />
                 <AiAnalysis baziData={baziData} luck={luck} />
               </>
             ) : (

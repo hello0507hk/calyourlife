@@ -270,6 +270,14 @@ interface StreamResult {
 
 const EMPTY_RESULT: StreamResult = { text: '', finish: 'error' };
 
+// 報告未寫完時回傳給前端，按「繼續生成」時原樣送回，跳過初批直接續寫
+interface ResumeState {
+  chapter: number;
+  partial: string;
+  done: string[];
+  drafts: { deepseek: string; qwen: string; grok: string };
+}
+
 const isTruncated = (r: StreamResult) =>
   ['length', 'MAX_TOKENS', 'CONTINUATION', 'timeout'].includes(r.finish);
 
@@ -533,7 +541,9 @@ export async function POST(req: Request) {
   const startedAt = Date.now();
 
   try {
-    const { type = 'deep', baziData, userNotes, targetYear = 2026, question } = await req.json();
+    const { type = 'deep', baziData, userNotes, targetYear = 2026, question, resume } = await req.json();
+    const resumeState: ResumeState | null =
+      resume && Array.isArray(resume.done) && resume.drafts ? resume : null;
 
     // 紀錄實時呼叫至後台計數器
     if ((global as any).__site_stats) {
@@ -757,37 +767,45 @@ ${QIZHENG_REFERENCE_DOCS}`;
     const callDraft = (label: string, url: string, key: string, models: string[]) =>
       streamChat(label, url, key, models, initialSystemPrompt, userPromptText, draftDeadline, executionErrors);
 
-    const deepseekPromise = callDraft('DeepSeek', 'https://api.deepseek.com/chat/completions', deepseekKey, ['deepseek-chat']);
+    let draftDeepseek = resumeState?.drafts.deepseek ?? '';
+    let draftQwen = resumeState?.drafts.qwen ?? '';
+    let draftGrok = resumeState?.drafts.grok ?? '';
+    let draftResults: StreamResult[] = [];
 
-    let qwenPromise: Promise<StreamResult> = Promise.resolve(EMPTY_RESULT);
-    if (dashscopeKey) {
-      qwenPromise = callDraft('Qwen(DashScope)', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', dashscopeKey, ['qwen-max']);
-    } else if (openrouterKey) {
-      qwenPromise = callDraft('Qwen(OpenRouter)', 'https://openrouter.ai/api/v1/chat/completions', openrouterKey, ['qwen/qwen-2.5-72b-instruct']);
-    } else {
-      executionErrors['Qwen'] = '未設定 QWEN_API_KEY 或 OPENROUTER_API_KEY';
+    if (!resumeState) {
+      const deepseekPromise = callDraft('DeepSeek', 'https://api.deepseek.com/chat/completions', deepseekKey, ['deepseek-chat']);
+
+      let qwenPromise: Promise<StreamResult> = Promise.resolve(EMPTY_RESULT);
+      if (dashscopeKey) {
+        qwenPromise = callDraft('Qwen(DashScope)', 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', dashscopeKey, ['qwen-max']);
+      } else if (openrouterKey) {
+        qwenPromise = callDraft('Qwen(OpenRouter)', 'https://openrouter.ai/api/v1/chat/completions', openrouterKey, ['qwen/qwen-2.5-72b-instruct']);
+      } else {
+        executionErrors['Qwen'] = '未設定 QWEN_API_KEY 或 OPENROUTER_API_KEY';
+      }
+
+      let grokPromise: Promise<StreamResult> = Promise.resolve(EMPTY_RESULT);
+      if (xaiKey || openrouterKey) {
+        grokPromise = (async () => {
+          if (xaiKey) {
+            const r = await callDraft('Grok', 'https://api.x.ai/v1/chat/completions', xaiKey, ['grok-2-latest', 'grok-2']);
+            if (r.text.trim()) return r;
+          }
+          if (openrouterKey) return callDraft('Grok(OpenRouter)', 'https://openrouter.ai/api/v1/chat/completions', openrouterKey, ['x-ai/grok-2']);
+          return EMPTY_RESULT;
+        })();
+      } else {
+        executionErrors['Grok'] = '未設定 XAI_API_KEY / GROK_API_KEY 或 OPENROUTER_API_KEY';
+      }
+
+      const [deepseekResult, qwenResult, grokResult] = await Promise.all([deepseekPromise, qwenPromise, grokPromise]);
+
+      const draftText = (r: StreamResult) => (r.text.trim() && isTruncated(r) ? `${r.text}\n\n（此初稿因長度或時限中斷，未完部分請審閱時補全）` : r.text);
+      draftDeepseek = draftText(deepseekResult);
+      draftQwen = draftText(qwenResult);
+      draftGrok = draftText(grokResult);
+      draftResults = [deepseekResult, qwenResult, grokResult];
     }
-
-    let grokPromise: Promise<StreamResult> = Promise.resolve(EMPTY_RESULT);
-    if (xaiKey || openrouterKey) {
-      grokPromise = (async () => {
-        if (xaiKey) {
-          const r = await callDraft('Grok', 'https://api.x.ai/v1/chat/completions', xaiKey, ['grok-2-latest', 'grok-2']);
-          if (r.text.trim()) return r;
-        }
-        if (openrouterKey) return callDraft('Grok(OpenRouter)', 'https://openrouter.ai/api/v1/chat/completions', openrouterKey, ['x-ai/grok-2']);
-        return EMPTY_RESULT;
-      })();
-    } else {
-      executionErrors['Grok'] = '未設定 XAI_API_KEY / GROK_API_KEY 或 OPENROUTER_API_KEY';
-    }
-
-    const [deepseekResult, qwenResult, grokResult] = await Promise.all([deepseekPromise, qwenPromise, grokPromise]);
-
-    const draftText = (r: StreamResult) => (r.text.trim() && isTruncated(r) ? `${r.text}\n\n（此初稿因長度或時限中斷，未完部分請審閱時補全）` : r.text);
-    const draftDeepseek = draftText(deepseekResult);
-    const draftQwen = draftText(qwenResult);
-    const draftGrok = draftText(grokResult);
 
     // ==================================================================
     // 第二階段：Google Gemini 大師終極校訂與總審閱
@@ -795,6 +813,7 @@ ${QIZHENG_REFERENCE_DOCS}`;
     let finalReport = '';
     let finalTruncated = false;
     let geminiUsed = false;
+    let resumeOut: ResumeState | null = null;
 
     if (geminiKey) {
       const remaining = finalDeadline - Date.now();
@@ -826,59 +845,88 @@ ${clipDraft(draftQwen) || '（未回應）'}
 【初稿節錄（Grok）】：
 ${clipDraft(draftGrok) || '（未回應）'}`;
 
-      const parts: string[] = [];
-      for (let i = 0; i < chapters.length; i++) {
-        if (Date.now() > finalDeadline - 15_000) break;
+      const parts: string[] = resumeState ? resumeState.done.filter((p) => typeof p === 'string' && p.trim()) : [];
+      const startChapter = Math.min(Math.max(Number(resumeState?.chapter) || 0, 0), chapters.length);
+      let pendingPartial = resumeState?.partial?.trim() ?? '';
+      let nextChapter = -1;
+
+      for (let i = startChapter; i < chapters.length; i++) {
+        if (Date.now() > finalDeadline - 15_000) {
+          nextChapter = i;
+          break;
+        }
         const chapter = chapters[i];
-        const prev = parts.join('\n\n').slice(-1200);
-        const prompt = `${reviewShared}
+        const context = `${reviewShared}\n【本段任務：${chapter.title}】\n${chapter.outline}`;
+
+        let first: StreamResult;
+        if (pendingPartial) {
+          first = { text: pendingPartial, finish: 'MAX_TOKENS' };
+          pendingPartial = '';
+        } else {
+          const prev = parts.join('\n\n').slice(-1200);
+          const prompt = `${reviewShared}
 
 【本段任務：${chapter.title}】
 ${chapter.outline}
 ${i === 0 ? '本段結束時不要輸出 JSON 評分。' : `上一段已完成，結尾如下（供銜接，勿重寫）：\n${prev || '（無）'}\n本段寫完後，另起一行輸出唯一 JSON 評分區塊：${scoreSpec}`}
 只輸出命主報告正文。`;
+          first = await streamGeminiChapter(
+            geminiKey,
+            prompt,
+            finalDeadline,
+            geminiModels,
+            `Gemini-${chapter.title}`,
+            executionErrors,
+            CHAPTER_MAX_TOKENS
+          );
+        }
 
-        const first = await streamGeminiChapter(
-          geminiKey,
-          prompt,
-          finalDeadline,
-          geminiModels,
-          `Gemini-${chapter.title}`,
-          executionErrors,
-          CHAPTER_MAX_TOKENS
-        );
         const done = await completeGeminiText(
           geminiKey,
           first,
-          `${reviewShared}\n【本段任務：${chapter.title}】\n${chapter.outline}`,
+          context,
           finalDeadline,
           geminiModels,
           `Gemini-${chapter.title}`,
           executionErrors
         );
-        if (done.text.trim()) {
-          parts.push(done.text.trim());
-          geminiUsed = true;
-          if (isTruncated(done) && i === chapters.length - 1) finalTruncated = true;
+        if (!done.text.trim()) {
+          nextChapter = i;
+          break;
         }
+        if (isTruncated(done)) {
+          nextChapter = i;
+          pendingPartial = done.text.trim();
+          break;
+        }
+        parts.push(done.text.trim());
       }
 
-      if (parts.length) finalReport = parts.join('\n\n---\n\n');
-      if (geminiUsed && !looksComplete(finalReport, type)) finalTruncated = true;
+      const written = pendingPartial ? [...parts, pendingPartial] : parts;
+      if (written.length) {
+        finalReport = written.join('\n\n---\n\n');
+        geminiUsed = true;
+      }
+      if (geminiUsed && nextChapter >= 0) {
+        finalTruncated = true;
+        resumeOut = {
+          chapter: nextChapter,
+          partial: pendingPartial,
+          done: parts,
+          drafts: { deepseek: clipDraft(draftDeepseek), qwen: clipDraft(draftQwen), grok: clipDraft(draftGrok) },
+        };
+      }
     } else {
       executionErrors['Gemini'] = '未設定 GEMINI_API_KEY';
     }
 
     if (!finalReport) {
-      const best = [deepseekResult, qwenResult, grokResult].filter((r) => r.text.trim()).sort((a, b) => b.text.length - a.text.length)[0];
+      const best = draftResults.filter((r) => r.text.trim()).sort((a, b) => b.text.length - a.text.length)[0];
       finalReport = best?.text || '未取得分析結果，請檢視 API 金鑰與網絡連線。';
-      finalTruncated = !!best && isTruncated(best);
-    }
-
-    if (finalTruncated && !looksComplete(finalReport, type)) {
-      finalReport += '\n\n---\n\n> 本報告後半因伺服器時限未能寫完。已寫成的章節可先閱讀，稍後再按「重新生成」補齊。';
-    } else {
-      finalTruncated = false;
+      finalTruncated = !!best && isTruncated(best) && !looksComplete(finalReport, type);
+      if (finalTruncated) {
+        finalReport += '\n\n---\n\n> 本報告後半因伺服器時限未能寫完。已寫成的章節可先閱讀，稍後再按「重新生成」補齊。';
+      }
     }
 
     return NextResponse.json({
@@ -891,6 +939,7 @@ ${i === 0 ? '本段結束時不要輸出 JSON 評分。' : `上一段已完成�
         grokUsed: !!draftGrok,
         geminiUsed: geminiUsed,
         truncated: finalTruncated,
+        resume: resumeOut,
         errors: executionErrors,
       },
     });
