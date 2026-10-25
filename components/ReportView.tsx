@@ -52,27 +52,77 @@ function splitReport(input: string): { markdown: string; data: ReportScores | nu
 
 const num = (v: unknown) => (typeof v === 'number' && isFinite(v) ? v : Number(v) || 0);
 
+const WUXING_CHAR_COLOR: Record<string, string> = {
+  木: WUXING_COLOR.木,
+  火: WUXING_COLOR.火,
+  土: WUXING_COLOR.土,
+  金: WUXING_COLOR.金,
+  水: WUXING_COLOR.水,
+  甲: WUXING_COLOR.木,
+  乙: WUXING_COLOR.木,
+  丙: WUXING_COLOR.火,
+  丁: WUXING_COLOR.火,
+  戊: WUXING_COLOR.土,
+  己: WUXING_COLOR.土,
+  庚: WUXING_COLOR.金,
+  辛: WUXING_COLOR.金,
+  壬: WUXING_COLOR.水,
+  癸: WUXING_COLOR.水,
+  寅: WUXING_COLOR.木,
+  卯: WUXING_COLOR.木,
+  巳: WUXING_COLOR.火,
+  午: WUXING_COLOR.火,
+  辰: WUXING_COLOR.土,
+  戌: WUXING_COLOR.土,
+  丑: WUXING_COLOR.土,
+  未: WUXING_COLOR.土,
+  申: WUXING_COLOR.金,
+  酉: WUXING_COLOR.金,
+  亥: WUXING_COLOR.水,
+  子: WUXING_COLOR.水,
+};
+
+const WUXING_SPLIT = /([木火土金水甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥])/g;
+
+function colorWuxing(node: React.ReactNode): React.ReactNode {
+  if (typeof node === 'string') {
+    const parts = node.split(WUXING_SPLIT);
+    if (parts.length === 1) return node;
+    return parts.map((part, i) => {
+      const color = WUXING_CHAR_COLOR[part];
+      if (!color) return part;
+      return (
+        <span key={`${part}-${i}`} className="font-semibold" style={{ color }}>
+          {part}
+        </span>
+      );
+    });
+  }
+  if (Array.isArray(node)) return node.map((child, i) => <React.Fragment key={i}>{colorWuxing(child)}</React.Fragment>);
+  return node;
+}
+
 const MD: Components = {
-  h1: ({ children }) => <h2 className="mt-6 mb-3 font-serif text-xl font-bold text-amber-200 first:mt-0">{children}</h2>,
-  h2: ({ children }) => <h3 className="mt-6 mb-3 font-serif text-lg font-bold text-amber-200 first:mt-0">{children}</h3>,
+  h1: ({ children }) => <h2 className="mt-6 mb-3 font-serif text-xl font-bold text-amber-200 first:mt-0">{colorWuxing(children)}</h2>,
+  h2: ({ children }) => <h3 className="mt-6 mb-3 font-serif text-lg font-bold text-amber-200 first:mt-0">{colorWuxing(children)}</h3>,
   h3: ({ children }) => (
     <h3 className="mt-7 mb-3 flex items-start gap-2 rounded-lg border-l-4 border-amber-500 bg-amber-500/10 px-3 py-2 font-serif text-base font-bold leading-snug text-amber-100 first:mt-0 sm:text-[17px]">
-      {children}
+      {colorWuxing(children)}
     </h3>
   ),
-  h4: ({ children }) => <h4 className="mt-4 mb-2 text-[15px] font-bold text-slate-100">{children}</h4>,
-  p: ({ children }) => <p className="my-2.5 text-[15px] leading-[1.85] text-slate-200 sm:text-sm sm:leading-relaxed">{children}</p>,
+  h4: ({ children }) => <h4 className="mt-4 mb-2 text-[15px] font-bold text-slate-100">{colorWuxing(children)}</h4>,
+  p: ({ children }) => <p className="my-2.5 text-[15px] leading-[1.85] text-slate-200 sm:text-sm sm:leading-relaxed">{colorWuxing(children)}</p>,
   ul: ({ children }) => <ul className="my-2.5 flex flex-col gap-1.5 pl-1">{children}</ul>,
   ol: ({ children }) => <ol className="my-2.5 flex list-decimal flex-col gap-1.5 pl-5 marker:text-amber-400">{children}</ol>,
   li: ({ children }) => (
     <li className="relative pl-4 text-[15px] leading-[1.8] text-slate-200 before:absolute before:top-[0.75em] before:left-0 before:size-1.5 before:rounded-full before:bg-amber-500/70 sm:text-sm sm:leading-relaxed [ol>&]:pl-1 [ol>&]:before:hidden">
-      {children}
+      {colorWuxing(children)}
     </li>
   ),
-  strong: ({ children }) => <strong className="font-semibold text-amber-200">{children}</strong>,
+  strong: ({ children }) => <strong className="font-semibold text-amber-200">{colorWuxing(children)}</strong>,
   hr: () => <hr className="my-6 h-px border-0 bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />,
   blockquote: ({ children }) => (
-    <blockquote className="my-3 rounded-r-lg border-l-2 border-sky-400/60 bg-sky-500/5 px-3 py-1 text-slate-300">{children}</blockquote>
+    <blockquote className="my-3 rounded-r-lg border-l-2 border-sky-400/60 bg-sky-500/5 px-3 py-1 text-slate-300">{colorWuxing(children)}</blockquote>
   ),
   table: ({ children }) => (
     <div className="my-3 overflow-x-auto rounded-lg border border-slate-800">
@@ -84,8 +134,8 @@ const MD: Components = {
   ),
   code: ({ children }) => <code className="whitespace-pre-wrap break-words font-sans">{children}</code>,
   thead: ({ children }) => <thead className="bg-slate-800/60 text-amber-200">{children}</thead>,
-  th: ({ children }) => <th className="px-3 py-2 font-semibold">{children}</th>,
-  td: ({ children }) => <td className="border-t border-slate-800 px-3 py-2 text-slate-300">{children}</td>,
+  th: ({ children }) => <th className="px-3 py-2 font-semibold">{colorWuxing(children)}</th>,
+  td: ({ children }) => <td className="border-t border-slate-800 px-3 py-2 text-slate-300">{colorWuxing(children)}</td>,
 };
 
 function ChartCard({ title, children, className = '' }: { title: string; children: React.ReactNode; className?: string }) {
