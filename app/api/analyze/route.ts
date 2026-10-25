@@ -6,8 +6,8 @@ import { calculateQizheng, ZODIAC_BRANCHES } from '@/lib/qizheng';
 // 1. 強制動態獲取環境變數，禁止靜態快取
 export const dynamic = 'force-dynamic';
 
-// 2. 超時限制（Vercel Pro 設為 300 秒，Hobby 免費版請設為 60）
-export const maxDuration = 300;
+// 2. 超時限制（Vercel Pro 上限 800 秒；Hobby 上限 300 秒）
+export const maxDuration = 800;
 
 // 初始化全域統計變數 (供後台 /admin 讀取實時數據)
 if (!(global as any).__site_stats) {
@@ -256,9 +256,9 @@ function scoreBlockSpec(type: string, dayyun: any[] = []) {
 ${shape}`;
 }
 
-// Vercel maxDuration 為 300 秒：初批須於 150 秒內收結，餘下時間留給總審閱
-const DRAFT_BUDGET_MS = 120_000;
-const TOTAL_BUDGET_MS = 285_000;
+// 須小於 maxDuration（800 秒）：初批須於 180 秒內收結，餘下時間留給總審閱
+const DRAFT_BUDGET_MS = 180_000;
+const TOTAL_BUDGET_MS = 780_000;
 const DRAFT_MAX_TOKENS = 4096;
 const CHAPTER_MAX_TOKENS = 8192;
 const CONTINUE_MAX_TOKENS = 4096;
@@ -270,7 +270,15 @@ interface StreamResult {
 
 const EMPTY_RESULT: StreamResult = { text: '', finish: 'error' };
 
-const isTruncated = (r: StreamResult) => ['length', 'MAX_TOKENS', 'timeout'].includes(r.finish);
+const isTruncated = (r: StreamResult) =>
+  ['length', 'MAX_TOKENS', 'CONTINUATION', 'timeout'].includes(r.finish);
+
+// Gemini 4 會忽略 temperature，且思考 token 計入 maxOutputTokens，須預留更大上限
+function geminiGenerationConfig(model: string, maxTokens: number) {
+  if (model.startsWith('gemini-4')) return { maxOutputTokens: Math.max(maxTokens * 4, 32_768) };
+  if (model.startsWith('gemini-2.5')) return { temperature: 0.0, maxOutputTokens: maxTokens };
+  return { maxOutputTokens: maxTokens };
+}
 
 type SSEExtract = (json: any) => { text?: string; finish?: string };
 
@@ -433,7 +441,7 @@ async function streamGeminiChapter(
             { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
             { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
           ],
-          generationConfig: { temperature: 0.0, maxOutputTokens: maxTokens },
+          generationConfig: geminiGenerationConfig(model, maxTokens),
         }),
       },
       deadline,
@@ -458,7 +466,7 @@ async function completeGeminiText(
   let text = first.text;
   let finish = first.finish;
   let round = 0;
-  while (isTruncated({ text, finish }) && Date.now() < deadline - 12_000 && round < 2) {
+  while (isTruncated({ text, finish }) && Date.now() < deadline - 12_000 && round < 3) {
     round += 1;
     const tail = text.slice(-800);
     const cont = await streamGeminiChapter(
@@ -792,8 +800,8 @@ ${QIZHENG_REFERENCE_DOCS}`;
       const remaining = finalDeadline - Date.now();
       const proFirst = remaining > 140_000;
       const geminiModels = proFirst
-        ? ['gemini-2.5-pro', 'gemini-pro-latest', 'gemini-2.5-flash', 'gemini-flash-latest']
-        : ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-pro'];
+        ? ['gemini-4-argon', 'gemini-2.5-pro', 'gemini-3.8-flash', 'gemini-2.5-flash']
+        : ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-4-argon'];
 
       const chapters = reportChapters(type, targetGanZhiStr, DEEP_REPORT_YEAR);
       const reviewShared = `你是一位權威八字命理與七政四餘的總審閱官，精通子平八字、《滴天髓徵義》、《造化元鑰》、《子平一得》、神峰通考、《鄭氏星案》、《果老星宗》與《星學大成》。
