@@ -10,6 +10,7 @@ import { Logo, LogoMark } from '@/components/Logo';
 import { BalanceBar, TenGodBars, WuxingDonut } from '@/components/charts';
 import ReportView from '@/components/ReportView';
 import {
+  AlertTriangle,
   ArrowRight,
   CalendarDays,
   ChevronDown,
@@ -25,6 +26,7 @@ import {
   Moon,
   PencilLine,
   PieChart,
+  RotateCcw,
   Sparkles,
   Star,
   TrendingUp,
@@ -743,6 +745,7 @@ interface ReportState {
   question?: string;
   resume?: unknown;
   error?: string;
+  failed?: boolean;
 }
 
 const ANALYSIS_TABS = [
@@ -791,26 +794,27 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
   const yearLuck = luck.find((p) => targetYear >= p.startYear && targetYear <= p.endYear);
   const yearLabel = `${targetYear} ${yearGanZhi(targetYear)}年`;
 
-  const handleGenerate = async (type: AnalysisType, questionText?: string) => {
+  const handleGenerate = async (type: AnalysisType, questionText?: string, year = targetYear) => {
     if (loadingTab) return;
     const q = (questionText ?? question).trim();
     if (type === 'yearly_qa' && !q) return;
 
     setLoadingTab(type);
     setReports((r) => ({ ...r, [type]: { text: '' } }));
+    const failed = (error: string) =>
+      setReports((r) => ({ ...r, [type]: { text: '', year, question: q, failed: true, error } }));
     try {
-      const data = await requestReport(type, targetYear, q);
-      setReports((r) => ({
-        ...r,
-        [type]: {
-          text: data.result || data.error || '無法生成報告。',
-          year: targetYear,
-          question: q,
-          resume: data.meta?.resume ?? undefined,
-        },
-      }));
+      const data = await requestReport(type, year, q);
+      if (data.result) {
+        setReports((r) => ({
+          ...r,
+          [type]: { text: data.result, year, question: q, resume: data.meta?.resume ?? undefined },
+        }));
+      } else {
+        failed(data.error || '分析失敗，請重新批算。');
+      }
     } catch {
-      setReports((r) => ({ ...r, [type]: { text: '請求發送失敗，請檢查網絡連線。' } }));
+      failed('連線中斷或伺服器逾時，分析失敗。請檢查網絡後重新批算。');
     } finally {
       setLoadingTab(null);
     }
@@ -950,6 +954,24 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
         )}
 
         {loading && !continuing && <AiLoading />}
+        {report.failed && !loading && (
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-red-500/40 bg-red-500/5 p-5 text-center print:hidden">
+            <AlertTriangle className="size-6 text-red-400" />
+            <div>
+              <p className="text-sm font-bold text-red-300">分析失敗</p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-400">{report.error}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleGenerate(activeTab, report.question, report.year)}
+              disabled={!!loadingTab}
+              className="inline-flex h-11 w-full max-w-xs items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 text-sm font-bold text-slate-950 disabled:opacity-60"
+            >
+              <RotateCcw className="size-4" />
+              重新批算
+            </button>
+          </div>
+        )}
         {report.text && (!loading || continuing) && (
           <ReportView
             type={activeTab}

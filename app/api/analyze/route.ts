@@ -420,11 +420,6 @@ function clipDraft(text: string, limit = 2800) {
   return `${t.slice(0, limit)}\n…（初稿已節錄，完整細節由總審依命盤與法則補寫）`;
 }
 
-function looksComplete(text: string, type: string) {
-  if (type === 'yearly_qa') return /###\s*五[、.]/.test(text);
-  return /###\s*六[、.]/.test(text);
-}
-
 async function streamGeminiChapter(
   geminiKey: string,
   prompt: string,
@@ -770,8 +765,6 @@ ${QIZHENG_REFERENCE_DOCS}`;
     let draftDeepseek = resumeState?.drafts.deepseek ?? '';
     let draftQwen = resumeState?.drafts.qwen ?? '';
     let draftGrok = resumeState?.drafts.grok ?? '';
-    let draftResults: StreamResult[] = [];
-
     if (!resumeState) {
       const deepseekPromise = callDraft('DeepSeek', 'https://api.deepseek.com/chat/completions', deepseekKey, ['deepseek-chat']);
 
@@ -804,7 +797,6 @@ ${QIZHENG_REFERENCE_DOCS}`;
       draftDeepseek = draftText(deepseekResult);
       draftQwen = draftText(qwenResult);
       draftGrok = draftText(grokResult);
-      draftResults = [deepseekResult, qwenResult, grokResult];
     }
 
     // ==================================================================
@@ -921,12 +913,14 @@ ${i === 0 ? '本段結束時不要輸出 JSON 評分。' : `上一段已完成�
     }
 
     if (!finalReport) {
-      const best = draftResults.filter((r) => r.text.trim()).sort((a, b) => b.text.length - a.text.length)[0];
-      finalReport = best?.text || '未取得分析結果，請檢視 API 金鑰與網絡連線。';
-      finalTruncated = !!best && isTruncated(best) && !looksComplete(finalReport, type);
-      if (finalTruncated) {
-        finalReport += '\n\n---\n\n> 本報告後半因伺服器時限未能寫完。已寫成的章節可先閱讀，稍後再按「重新生成」補齊。';
-      }
+      return NextResponse.json(
+        {
+          error: 'Gemini 總審閱未能完成，分析失敗。請按「重新批算」再試一次。',
+          failed: true,
+          details: executionErrors,
+        },
+        { status: 502 }
+      );
     }
 
     return NextResponse.json({
