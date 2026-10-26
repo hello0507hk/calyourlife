@@ -249,7 +249,7 @@ export default function ReportView({
     <div className="flex flex-col gap-4">
       {data && <ReportCharts type={type} data={data} luck={luck} targetYear={targetYear} />}
 
-      <article className="prose-report min-w-0 break-words rounded-xl border border-slate-800 bg-slate-950/50 p-4 sm:p-5">
+      <article className="prose-report min-w-0 break-words rounded-xl border border-slate-800 bg-slate-950/50 p-4 sm:p-5 print:border-0 print:p-0">
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD}>
           {markdown}
         </ReactMarkdown>

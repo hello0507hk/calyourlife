@@ -105,6 +105,8 @@ body {
     color: #0f172a !important;
     height: auto !important;
     min-height: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
     overflow: visible !important;
     padding: 0 !important;
   }
@@ -141,9 +143,6 @@ body {
   table,
   li {
     break-inside: avoid;
-  }
-  section {
-    margin-bottom: 4mm;
   }
   #ai:not(:has(.prose-report)) {
     display: none !important;

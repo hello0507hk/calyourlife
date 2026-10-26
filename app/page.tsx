@@ -188,7 +188,7 @@ function SectionCard({
   return (
     <section
       id={id}
-      className={`rounded-2xl border bg-slate-900/70 p-4 shadow-xl shadow-black/20 backdrop-blur sm:p-5 ${
+      className={`rounded-2xl border bg-slate-900/70 p-4 shadow-xl shadow-black/20 backdrop-blur sm:p-5 print:w-full print:rounded-xl print:p-[4mm] ${
         accent ? 'border-amber-500/30' : 'border-slate-800'
       }`}
     >
@@ -542,7 +542,7 @@ function FourPillars({ pillars, bazi }: { pillars: Pillar[]; bazi: BaziResult })
         </div>
       )}
 
-      <div className="grid grid-cols-4 gap-1.5 sm:gap-3 print:mx-auto print:max-w-[150mm] print:gap-2">
+      <div className="grid grid-cols-4 gap-1.5 sm:gap-3 print:mx-auto print:max-w-[80%] print:gap-2">
         {ordered.map((p) => {
           const isDay = p.key === 'day';
           const stem = ELEMENT_STYLE[p.heavenlyElement];
@@ -650,7 +650,7 @@ function QizhengSection({ data }: { data: QizhengChart }) {
 
         {viewMode === 'svg' && (
           <>
-            <div className="relative print:mx-auto print:w-[150mm]">
+            <div className="relative print:mx-auto print:w-[75%]">
               <div className={`no-scrollbar rounded-xl border border-amber-900/40 print:overflow-visible ${zoomed ? 'overflow-auto' : 'overflow-hidden'}`}>
                 <div className={zoomed ? 'w-[760px] print:w-full' : 'w-full'}>
                   <QizhengChartSVG data={data} />
@@ -701,11 +701,11 @@ function LuckSection({ luck, qiyunText }: { luck: LuckPeriod[]; qiyunText?: stri
 
   return (
     <SectionCard id="luck" icon={TrendingUp} title="大運" subtitle={qiyunText}>
-      <ol ref={scroller} className="no-scrollbar -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 print:mx-0 print:flex-wrap print:justify-center print:gap-1 print:overflow-visible print:px-0">
+      <ol ref={scroller} className="no-scrollbar -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 print:mx-0 print:gap-1.5 print:overflow-visible print:px-0">
         {luck.map((p) => (
-          <li key={p.startYear} data-current={p.current} className="flex shrink-0 snap-center flex-col items-center gap-1">
+          <li key={p.startYear} data-current={p.current} className="flex shrink-0 snap-center flex-col items-center gap-1 print:min-w-0 print:flex-1">
             <div
-              className={`flex w-[4.5rem] flex-col items-center rounded-xl border px-1 py-2.5 sm:w-20 print:w-[17mm] print:py-1.5 ${
+              className={`flex w-[4.5rem] flex-col items-center rounded-xl border px-1 py-2.5 sm:w-20 print:w-full print:py-1.5 ${
                 p.current ? 'border-amber-500 bg-amber-500/10 shadow-lg shadow-amber-500/10' : 'border-slate-800 bg-slate-950/60'
               }`}
             >
@@ -1119,11 +1119,11 @@ export default function Page() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl px-3 pt-4 sm:px-6 sm:pt-8">
-        <div className="grid items-start gap-4 lg:grid-cols-[320px_1fr] lg:gap-6">
+      <div className="mx-auto max-w-6xl px-3 pt-4 sm:px-6 sm:pt-8 print:max-w-none print:p-0">
+        <div className="grid items-start gap-4 lg:grid-cols-[320px_1fr] lg:gap-6 print:block">
           <BaziForm onSubmit={handleFormSubmit} loading={loading} hasResult={!!baziData} />
 
-          <div className="flex min-w-0 flex-col gap-4 sm:gap-5">
+          <div className="flex min-w-0 flex-col gap-4 sm:gap-5 print:w-full print:gap-[4mm]">
             {baziData ? (
               <>
                 <FourPillars pillars={pillars} bazi={baziData} />
