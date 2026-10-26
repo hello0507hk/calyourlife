@@ -42,101 +42,130 @@ body {
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom);
 }
+
 /* ==================================================================
-   A4 緊湊列印版面專用樣式 (徹底解決 11 頁空白與 Safari 膨脹問題)
+   A4 列印：改用淺色色板，盒子不跨頁，長篇報告可自然分頁
    ================================================================== */
-   @media print {
-    /* 1. 設定 A4 頁面邊界 (上下 10mm、左右 12mm) */
-    @page {
-      size: A4 portrait;
-      margin: 10mm 12mm 10mm 12mm;
-    }
-  
-    /* 2. 重設根容器，解除 Safari 的高度與 overflow 限制 */
-    html, body, main {
-      background-color: #ffffff !important;
-      color: #0f172a !important;
-      height: auto !important;
-      min-height: auto !important;
-      overflow: visible !important;
-      width: 100% !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-  
-    /* 3. 保留五行色塊背景與清晰文字 */
-    * {
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-      box-shadow: none !important;
-      text-shadow: none !important;
-    }
-  
-    /* 4. 隱藏輸入表單與按鈕 */
-    header, footer, nav, form, button, .print\:hidden {
-      display: none !important;
-    }
-  
-    /* 5. 解除網頁版兩欄佈局，讓內容直排鋪滿 A4 */
-    .grid {
-      display: block !important;
-      width: 100% !important;
-    }
-  
-    /* 四柱八字卡片保持 4 欄一字排開 */
-    .grid-cols-2.sm\:grid-cols-4 {
-      display: grid !important;
-      grid-template-columns: repeat(4, 1fr) !important;
-      gap: 8px !important;
-    }
-  
-    /* 6. 卡片邊框與樣式轉為淺色列印版 */
-    section, article, .rounded-2xl, .rounded-xl {
-      border-color: #cbd5e1 !important;
-      background-color: #ffffff !important;
-      color: #0f172a !important;
-      margin-bottom: 10px !important;
-    }
-  
-    /* 7. 精確控制斷頁：僅標題防孤行，允許長文章自然跨頁流動 */
-    h1, h2, h3, h4, h5, h6 {
-      break-after: avoid !important;
-      page-break-after: avoid !important;
-      color: #0f172a !important;
-    }
-  
-    /* 8. AI 命理報告 Markdown 字體與行高緊湊化 */
-    .prose {
-      max-width: 100% !important;
-      font-size: 10pt !important;
-      line-height: 1.5 !important;
-      color: #1e293b !important;
-    }
-  
-    /* 縮減 Markdown 段落與標題間距 */
-    .prose p {
-      margin-top: 0.3em !important;
-      margin-bottom: 0.3em !important;
-    }
-  
-    .prose h3 {
-      font-size: 11pt !important;
-      font-weight: 700 !important;
-      border-bottom: 1px solid #cbd5e1 !important;
-      padding-bottom: 2px !important;
-      margin-top: 0.8em !important;
-      margin-bottom: 0.3em !important;
-      color: #0f172a !important;
-    }
-  
-    .prose ul, .prose ol {
-      margin-top: 0.2em !important;
-      margin-bottom: 0.2em !important;
-      padding-left: 1.2em !important;
-    }
-  
-    .prose li {
-      margin-top: 0.1em !important;
-      margin-bottom: 0.1em !important;
-    }
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm;
   }
+
+  /* 深色主題色階反轉為淺色，所有 Tailwind 色彩工具類隨之轉換 */
+  :root {
+    --color-slate-100: #0f172a;
+    --color-slate-200: #1e293b;
+    --color-slate-300: #334155;
+    --color-slate-400: #475569;
+    --color-slate-500: #64748b;
+    --color-slate-600: #94a3b8;
+    --color-slate-700: #cbd5e1;
+    --color-slate-800: #e2e8f0;
+    --color-slate-900: #f8fafc;
+    --color-slate-950: #ffffff;
+
+    --color-amber-100: #78350f;
+    --color-amber-200: #92400e;
+    --color-amber-300: #b45309;
+    --color-amber-400: #d97706;
+    --color-amber-800: #fcd34d;
+    --color-amber-900: #fde68a;
+    --color-amber-950: #fffbeb;
+
+    --color-emerald-200: #065f46;
+    --color-emerald-300: #047857;
+    --color-emerald-400: #059669;
+    --color-emerald-800: #a7f3d0;
+    --color-emerald-950: #ecfdf5;
+
+    --color-red-300: #b91c1c;
+    --color-red-400: #dc2626;
+    --color-red-800: #fecaca;
+    --color-red-950: #fef2f2;
+
+    --color-blue-400: #2563eb;
+    --color-blue-800: #bfdbfe;
+    --color-blue-950: #eff6ff;
+
+    --color-sky-300: #0369a1;
+    --color-sky-400: #0284c7;
+    --color-sky-950: #f0f9ff;
+
+    --color-violet-300: #6d28d9;
+    --color-violet-400: #7c3aed;
+    --color-fuchsia-300: #a21caf;
+    --color-orange-300: #c2410c;
+  }
+
+  html,
+  body,
+  main {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+
+  header,
+  footer,
+  nav,
+  form,
+  button {
+    display: none !important;
+  }
+
+  /* 報告內文五行字（行內色為深色主題用，列印改用深色版本） */
+  [data-wx='木'] { color: #059669 !important; }
+  [data-wx='火'] { color: #dc2626 !important; }
+  [data-wx='土'] { color: #d97706 !important; }
+  [data-wx='金'] { color: #64748b !important; }
+  [data-wx='水'] { color: #2563eb !important; }
+
+  /* 盒子整個印在同一頁；只有 AI 會診區與報告正文可以分頁 */
+  section,
+  article,
+  .rounded-xl,
+  .rounded-2xl,
+  svg,
+  table,
+  li {
+    break-inside: avoid;
+  }
+  section {
+    margin-bottom: 4mm;
+  }
+  #ai:not(:has(.prose-report)) {
+    display: none !important;
+  }
+  #ai,
+  #ai > div,
+  .prose-report {
+    break-inside: auto;
+  }
+  h2,
+  h3,
+  h4 {
+    break-after: avoid;
+  }
+  p {
+    orphans: 3;
+    widows: 3;
+  }
+
+  .prose-report p,
+  .prose-report li {
+    font-size: 10.5pt !important;
+    line-height: 1.6 !important;
+  }
+}

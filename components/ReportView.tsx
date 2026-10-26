@@ -52,34 +52,10 @@ function splitReport(input: string): { markdown: string; data: ReportScores | nu
 
 const num = (v: unknown) => (typeof v === 'number' && isFinite(v) ? v : Number(v) || 0);
 
-const WUXING_CHAR_COLOR: Record<string, string> = {
-  木: WUXING_COLOR.木,
-  火: WUXING_COLOR.火,
-  土: WUXING_COLOR.土,
-  金: WUXING_COLOR.金,
-  水: WUXING_COLOR.水,
-  甲: WUXING_COLOR.木,
-  乙: WUXING_COLOR.木,
-  丙: WUXING_COLOR.火,
-  丁: WUXING_COLOR.火,
-  戊: WUXING_COLOR.土,
-  己: WUXING_COLOR.土,
-  庚: WUXING_COLOR.金,
-  辛: WUXING_COLOR.金,
-  壬: WUXING_COLOR.水,
-  癸: WUXING_COLOR.水,
-  寅: WUXING_COLOR.木,
-  卯: WUXING_COLOR.木,
-  巳: WUXING_COLOR.火,
-  午: WUXING_COLOR.火,
-  辰: WUXING_COLOR.土,
-  戌: WUXING_COLOR.土,
-  丑: WUXING_COLOR.土,
-  未: WUXING_COLOR.土,
-  申: WUXING_COLOR.金,
-  酉: WUXING_COLOR.金,
-  亥: WUXING_COLOR.水,
-  子: WUXING_COLOR.水,
+const CHAR_WUXING: Record<string, WuxingName> = {
+  木: '木', 火: '火', 土: '土', 金: '金', 水: '水',
+  甲: '木', 乙: '木', 丙: '火', 丁: '火', 戊: '土', 己: '土', 庚: '金', 辛: '金', 壬: '水', 癸: '水',
+  寅: '木', 卯: '木', 巳: '火', 午: '火', 辰: '土', 戌: '土', 丑: '土', 未: '土', 申: '金', 酉: '金', 亥: '水', 子: '水',
 };
 
 const WUXING_SPLIT = /([木火土金水甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥])/g;
@@ -89,10 +65,10 @@ function colorWuxing(node: React.ReactNode): React.ReactNode {
     const parts = node.split(WUXING_SPLIT);
     if (parts.length === 1) return node;
     return parts.map((part, i) => {
-      const color = WUXING_CHAR_COLOR[part];
-      if (!color) return part;
+      const el = CHAR_WUXING[part];
+      if (!el) return part;
       return (
-        <span key={`${part}-${i}`} className="font-semibold" style={{ color }}>
+        <span key={`${part}-${i}`} className="font-semibold" data-wx={el} style={{ color: WUXING_COLOR[el] }}>
           {part}
         </span>
       );
@@ -155,6 +131,7 @@ function ElementChips({ label, items, tone }: { label: string; items?: string[];
       {items.map((el) => (
         <span
           key={el}
+          data-wx={el}
           className="inline-flex size-7 items-center justify-center rounded-lg border font-serif text-sm font-bold"
           style={{ color: WUXING_COLOR[el as WuxingName] ?? '#e2e8f0', borderColor: `${WUXING_COLOR[el as WuxingName] ?? '#475569'}66` }}
         >

@@ -221,7 +221,7 @@ function SegmentedTabs<T extends string>({
   busy?: NoInfer<T> | null;
 }) {
   return (
-    <div className="grid gap-1 rounded-xl border border-slate-800 bg-slate-950 p-1" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
+    <div className="grid gap-1 rounded-xl border border-slate-800 bg-slate-950 p-1 print:hidden" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
       {tabs.map(({ id, label, icon: Icon }) => (
         <button
           key={id}
@@ -542,7 +542,7 @@ function FourPillars({ pillars, bazi }: { pillars: Pillar[]; bazi: BaziResult })
         </div>
       )}
 
-      <div className="grid grid-cols-4 gap-1.5 sm:gap-3">
+      <div className="grid grid-cols-4 gap-1.5 sm:gap-3 print:mx-auto print:max-w-[150mm] print:gap-2">
         {ordered.map((p) => {
           const isDay = p.key === 'day';
           const stem = ELEMENT_STYLE[p.heavenlyElement];
@@ -550,7 +550,7 @@ function FourPillars({ pillars, bazi }: { pillars: Pillar[]; bazi: BaziResult })
           return (
             <article
               key={p.key}
-              className={`flex min-w-0 flex-col rounded-xl border p-1.5 sm:rounded-2xl sm:p-3 ${
+              className={`flex min-w-0 flex-col rounded-xl border p-1.5 sm:rounded-2xl sm:p-3 print:rounded-lg print:p-1.5 ${
                 isDay ? 'border-amber-500/70 bg-amber-500/[0.06] ring-1 ring-amber-500/20' : 'border-slate-800 bg-slate-950/50'
               }`}
             >
@@ -569,20 +569,20 @@ function FourPillars({ pillars, bazi }: { pillars: Pillar[]; bazi: BaziResult })
                 </span>
               </div>
 
-              <div className={`flex flex-col items-center rounded-lg border ${stem.border} ${stem.bg} py-1.5 sm:py-2.5`}>
-                <span className={`font-serif text-[28px] font-bold leading-none sm:text-4xl ${stem.text}`}>{p.heavenlyStem}</span>
-                <span className={`mt-1 text-[9px] sm:text-[10px] ${stem.text}`}>{ELEMENT_LABEL[p.heavenlyElement]}</span>
+              <div className={`flex flex-col items-center rounded-lg border ${stem.border} ${stem.bg} py-1.5 sm:py-2.5 print:py-1`}>
+                <span className={`font-serif text-[28px] font-bold leading-none sm:text-4xl print:text-2xl ${stem.text}`}>{p.heavenlyStem}</span>
+                <span className={`mt-1 text-[9px] sm:text-[10px] print:mt-0.5 ${stem.text}`}>{ELEMENT_LABEL[p.heavenlyElement]}</span>
               </div>
-              <div className={`mt-1 flex flex-col items-center rounded-lg border ${branch.border} ${branch.bg} py-1.5 sm:mt-1.5 sm:py-2.5`}>
-                <span className={`font-serif text-[28px] font-bold leading-none sm:text-4xl ${branch.text}`}>{p.earthlyBranch}</span>
-                <span className={`mt-1 text-[9px] sm:text-[10px] ${branch.text}`}>{ELEMENT_LABEL[p.earthlyElement]}</span>
+              <div className={`mt-1 flex flex-col items-center rounded-lg border ${branch.border} ${branch.bg} py-1.5 sm:mt-1.5 sm:py-2.5 print:mt-1 print:py-1`}>
+                <span className={`font-serif text-[28px] font-bold leading-none sm:text-4xl print:text-2xl ${branch.text}`}>{p.earthlyBranch}</span>
+                <span className={`mt-1 text-[9px] sm:text-[10px] print:mt-0.5 ${branch.text}`}>{ELEMENT_LABEL[p.earthlyElement]}</span>
               </div>
 
-              <ul className="mt-1.5 flex flex-col gap-0.5 border-t border-slate-800 pt-1.5">
+              <ul className="mt-1.5 flex flex-col gap-0.5 border-t border-slate-800 pt-1.5 print:mt-1 print:pt-1">
                 {p.hiddenStems.map((h) => (
-                  <li key={h.char} className="flex items-center justify-between gap-0.5 rounded px-0.5 text-[10px] sm:px-1 sm:text-xs">
+                  <li key={h.char} className="flex items-center justify-between gap-0.5 rounded px-0.5 text-[10px] sm:px-1 sm:text-xs print:text-[10px]">
                     <span className="text-[9px] text-slate-500 sm:text-[10px]">{h.qi}</span>
-                    <span className={`font-serif text-sm font-bold sm:text-base ${ELEMENT_STYLE[h.element].text}`}>{h.char}</span>
+                    <span className={`font-serif text-sm font-bold sm:text-base print:text-sm ${ELEMENT_STYLE[h.element].text}`}>{h.char}</span>
                     <span className="text-slate-300">{h.god}</span>
                   </li>
                 ))}
@@ -605,7 +605,7 @@ function ChartOverview({ bazi }: { bazi: BaziResult }) {
 
   return (
     <SectionCard id="charts" icon={PieChart} title="命盤圖解" subtitle="五行力量 · 十神分佈 · 同異黨比例">
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2 print:grid-cols-2">
         <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3.5">
           <div className="mb-3 flex items-baseline justify-between">
             <span className="text-xs font-medium text-slate-300">五行力量（含藏干加權）</span>
@@ -650,9 +650,9 @@ function QizhengSection({ data }: { data: QizhengChart }) {
 
         {viewMode === 'svg' && (
           <>
-            <div className="relative">
-              <div className={`no-scrollbar rounded-xl border border-amber-900/40 ${zoomed ? 'overflow-auto' : 'overflow-hidden'}`}>
-                <div className={zoomed ? 'w-[760px]' : 'w-full'}>
+            <div className="relative print:mx-auto print:w-[150mm]">
+              <div className={`no-scrollbar rounded-xl border border-amber-900/40 print:overflow-visible ${zoomed ? 'overflow-auto' : 'overflow-hidden'}`}>
+                <div className={zoomed ? 'w-[760px] print:w-full' : 'w-full'}>
                   <QizhengChartSVG data={data} />
                 </div>
               </div>
@@ -665,7 +665,7 @@ function QizhengSection({ data }: { data: QizhengChart }) {
                 {zoomed ? '縮小' : '放大'}
               </button>
             </div>
-            <p className="text-[11px] leading-relaxed text-slate-400">
+            <p className="text-[11px] leading-relaxed text-slate-400 print:hidden">
               由內至外：地支・卦・宮主 → 黃道宮 → 十二宮（紅為命宮、藍為身宮）→ <span className="text-blue-400">流年星曜</span> → 二十八宿 →
               <span className="text-emerald-400"> 本命七政四餘</span>（紅圈為逆／留／伏／蝕）→ <span className="text-violet-400">流年神煞</span> →
               <span className="text-emerald-400"> 本命神煞</span> → 大限年份。
@@ -701,11 +701,11 @@ function LuckSection({ luck, qiyunText }: { luck: LuckPeriod[]; qiyunText?: stri
 
   return (
     <SectionCard id="luck" icon={TrendingUp} title="大運" subtitle={qiyunText}>
-      <ol ref={scroller} className="no-scrollbar -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
+      <ol ref={scroller} className="no-scrollbar -mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 print:mx-0 print:flex-wrap print:justify-center print:gap-1 print:overflow-visible print:px-0">
         {luck.map((p) => (
           <li key={p.startYear} data-current={p.current} className="flex shrink-0 snap-center flex-col items-center gap-1">
             <div
-              className={`flex w-[4.5rem] flex-col items-center rounded-xl border px-1 py-2.5 sm:w-20 ${
+              className={`flex w-[4.5rem] flex-col items-center rounded-xl border px-1 py-2.5 sm:w-20 print:w-[17mm] print:py-1.5 ${
                 p.current ? 'border-amber-500 bg-amber-500/10 shadow-lg shadow-amber-500/10' : 'border-slate-800 bg-slate-950/60'
               }`}
             >
@@ -863,7 +863,7 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
   const report = reports[activeTab];
 
   const yearPicker = (
-    <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950 p-2.5">
+    <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950 p-2.5 print:hidden">
       <CalendarDays className="size-4 shrink-0 text-amber-400" />
       <div className="relative min-w-0 flex-1">
         <select
@@ -893,7 +893,7 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
         <SegmentedTabs tabs={ANALYSIS_TABS} value={activeTab} onChange={setActiveTab} busy={loadingTab} />
 
         {activeTab === 'deep' && (
-          <p className="text-xs leading-relaxed text-slate-400">
+          <p className="text-xs leading-relaxed text-slate-400 print:hidden">
             結合四柱格局、日主旺衰、喜用神，與七政四餘星曜落宮雙重會診，推算一生事業、財運、婚姻與健康，並以圖表顯示各範疇評分及大運起伏。
           </p>
         )}
@@ -901,7 +901,7 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
         {activeTab === 'yearly' && (
           <>
             {yearPicker}
-            <p className="text-xs leading-relaxed text-slate-400">
+            <p className="text-xs leading-relaxed text-slate-400 print:hidden">
               以流年干支對照日主、大運與原局生剋沖合，參照七政流年星曜，批算事業、財運、感情、健康，並附逐月吉凶走勢圖。
             </p>
           </>
@@ -915,9 +915,9 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
               onChange={(e) => setQuestion(e.target.value)}
               rows={3}
               placeholder="輸入想問的事情，例如：今年適合轉工嗎？"
-              className="w-full resize-y rounded-xl border border-slate-800 bg-slate-950 px-3 py-2.5 text-base text-slate-100 outline-none focus:border-amber-500/80 sm:text-sm"
+              className="w-full resize-y rounded-xl print:hidden border border-slate-800 bg-slate-950 px-3 py-2.5 text-base text-slate-100 outline-none focus:border-amber-500/80 sm:text-sm"
             />
-            <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 sm:flex-wrap">
+            <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 sm:flex-wrap print:hidden">
               {QUICK_QUESTIONS.map((q) => (
                 <button
                   key={q}
