@@ -302,7 +302,7 @@ function EntryNotice({ onConfirm, onClose }: { onConfirm: () => void; onClose: (
         aria-modal="true"
         aria-labelledby="entry-notice-title"
         onClick={(e) => e.stopPropagation()}
-        className="pb-safe relative w-full max-w-md rounded-2xl border border-amber-500/30 bg-slate-900 p-5 text-left shadow-2xl shadow-black/50 sm:p-6"
+        className="relative max-h-[calc(100svh-1.5rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-amber-500/30 bg-slate-900 px-5 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] text-left shadow-2xl shadow-black/50 sm:px-7 sm:pt-7 sm:pb-7"
       >
         <button
           type="button"
@@ -332,7 +332,7 @@ function EntryNotice({ onConfirm, onClose }: { onConfirm: () => void; onClose: (
           ))}
         </ul>
 
-        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row">
+        <div className="mt-6 flex flex-col-reverse gap-2.5 sm:flex-row">
           <button
             type="button"
             onClick={onClose}
