@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   ArrowRight,
   CalendarDays,
+  Check,
   ChevronDown,
   Clock,
   Eye,
@@ -872,16 +873,117 @@ const QUICK_QUESTIONS = [
   '有小人是非或官非嗎？',
 ];
 
-function AiLoading() {
+// 伺服器不回報進度，以下按各階段的一般耗時估算（秒，累計至該階段結束）
+const AI_STAGES: Record<AnalysisType | 'continue', { label: string; until: number }[]> = {
+  deep: [
+    { label: '整理八字與七政星盤數據', until: 5 },
+    { label: 'DeepSeek · Qwen · Grok 三模型初批', until: 150 },
+    { label: 'Gemini 總審：日主、格局、用神、性格', until: 330 },
+    { label: 'Gemini 總審：事業感情、大運、流年', until: 510 },
+    { label: '整理圖表與報告', until: 540 },
+  ],
+  yearly: [
+    { label: '整理八字與流年星曜數據', until: 5 },
+    { label: 'DeepSeek · Qwen · Grok 三模型初批', until: 150 },
+    { label: 'Gemini 總審：總評、事業、財運', until: 320 },
+    { label: 'Gemini 總審：感情、健康、逐月吉凶', until: 490 },
+    { label: '整理圖表與報告', until: 510 },
+  ],
+  yearly_qa: [
+    { label: '整理命盤與問事資料', until: 5 },
+    { label: 'DeepSeek · Qwen · Grok 三模型初批', until: 150 },
+    { label: 'Gemini 總審：問事吉凶與應期', until: 300 },
+    { label: '整理圖表與報告', until: 320 },
+  ],
+  continue: [
+    { label: 'Gemini 接續撰寫餘下章節', until: 260 },
+    { label: '整理圖表與報告', until: 280 },
+  ],
+};
+
+const nowMs = () => Date.now();
+
+const formatDuration = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+function AiLoading({ type, startedAt }: { type: AnalysisType | 'continue'; startedAt: number }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [startedAt]);
+
+  const stages = AI_STAGES[type];
+  const expected = stages[stages.length - 1].until;
+  const current = stages.findIndex((s) => elapsed < s.until);
+  const stageIndex = current === -1 ? stages.length - 1 : current;
+  // 超出預計時間後進度只會慢慢逼近 99%，不會停住或倒退
+  const percent =
+    elapsed <= expected ? (elapsed / expected) * 92 : 92 + 7 * (1 - Math.exp(-(elapsed - expected) / 120));
+  const remaining = expected - elapsed;
+
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-      <div className="flex items-center gap-2 text-xs text-amber-300">
-        <LogoMark size={22} animated />
-        多個 AI 模型正在會診，約需 5–10 分鐘，請勿關閉頁面或關閉屏幕…
+    <div className="flex flex-col gap-4 rounded-xl border border-amber-500/20 bg-slate-950/60 p-4 sm:p-5">
+      <div className="flex items-center gap-3">
+        <LogoMark size={44} animated />
+        <div className="min-w-0 flex-1">
+          <div className="font-serif text-sm font-bold text-amber-100 sm:text-base">
+            {type === 'continue' ? '正在生成餘下報告' : '多個 AI 模型正在會診'}
+          </div>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400 sm:text-xs">請勿縮小或關閉視窗，並保持屏幕開啟。</p>
+        </div>
       </div>
-      {[90, 75, 82, 60].map((w, i) => (
-        <div key={i} className="h-3 animate-pulse rounded bg-slate-800" style={{ width: `${w}%` }} />
-      ))}
+
+      <div>
+        <div className="mb-1.5 flex items-baseline justify-between gap-2 text-xs">
+          <span className="font-bold tabular-nums text-amber-300">{Math.floor(percent)}%</span>
+          <span className="tabular-nums text-slate-400">
+            已用 {formatDuration(elapsed)}
+            <span className="mx-1.5 text-slate-600">·</span>
+            {remaining > 0 ? `預計尚餘約 ${Math.ceil(remaining / 60)} 分鐘` : '即將完成，請稍候'}
+          </span>
+        </div>
+        <div className="relative h-2.5 overflow-hidden rounded-full bg-slate-800">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-amber-600 via-amber-400 to-amber-300 transition-[width] duration-1000 ease-linear"
+            style={{ width: `${percent}%` }}
+          />
+          <div className="absolute inset-y-0 w-1/3 animate-[progress-shine_1.8s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+        </div>
+      </div>
+
+      <ol className="flex flex-col gap-2">
+        {stages.map((stage, i) => {
+          const done = i < stageIndex;
+          const active = i === stageIndex;
+          return (
+            <li key={stage.label} className="flex items-center gap-2.5 text-xs sm:text-[13px]">
+              <span
+                className={`inline-flex size-5 shrink-0 items-center justify-center rounded-full border ${
+                  done
+                    ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300'
+                    : active
+                      ? 'border-amber-400 text-amber-300'
+                      : 'border-slate-700 text-slate-600'
+                }`}
+              >
+                {done ? (
+                  <Check className="size-3" />
+                ) : active ? (
+                  <span className="size-2 animate-ping rounded-full bg-amber-400" />
+                ) : (
+                  <span className="text-[10px]">{i + 1}</span>
+                )}
+              </span>
+              <span className={done ? 'text-slate-400 line-through decoration-slate-600' : active ? 'font-medium text-amber-100' : 'text-slate-500'}>
+                {stage.label}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }
@@ -900,6 +1002,7 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
   });
   const [loadingTab, setLoadingTab] = useState<AnalysisType | null>(null);
   const [continuing, setContinuing] = useState(false);
+  const [startedAt, setStartedAt] = useState(0);
 
   const yearLuck = luck.find((p) => targetYear >= p.startYear && targetYear <= p.endYear);
   const yearLabel = `${targetYear} ${yearGanZhi(targetYear)}年`;
@@ -910,6 +1013,7 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
     if (type === 'yearly_qa' && !q) return;
 
     setLoadingTab(type);
+    setStartedAt(nowMs());
     setReports((r) => ({ ...r, [type]: { text: '' } }));
     const failed = (error: string) =>
       setReports((r) => ({ ...r, [type]: { text: '', year, question: q, failed: true, error } }));
@@ -950,6 +1054,7 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
     const current = reports[type];
     if (loadingTab || !current.resume) return;
     setLoadingTab(type);
+    setStartedAt(nowMs());
     setContinuing(true);
     try {
       const data = await requestReport(type, current.year ?? targetYear, current.question ?? '', current.resume);
@@ -1063,7 +1168,7 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
           </p>
         )}
 
-        {loading && !continuing && <AiLoading />}
+        {loading && !continuing && <AiLoading type={activeTab} startedAt={startedAt} />}
         {report.failed && !loading && (
           <div className="flex flex-col items-center gap-3 rounded-xl border border-red-500/40 bg-red-500/5 p-5 text-center print:hidden">
             <AlertTriangle className="size-6 text-red-400" />
@@ -1092,11 +1197,11 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
         )}
         {report.resume != null && report.text && (!loading || continuing) && (
           <div className="flex flex-col gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 print:hidden">
-            <p className="text-xs leading-relaxed text-amber-200/90">
-              {continuing
-                ? 'Gemini 正在接續撰寫餘下章節，完成後會自動接在上方報告之後，請勿關閉頁面…'
-                : '報告尚未全部寫完。可先閱讀以上章節，看完後按下方按鈕生成餘下部分。'}
-            </p>
+            {continuing ? (
+              <AiLoading type="continue" startedAt={startedAt} />
+            ) : (
+              <p className="text-xs leading-relaxed text-amber-200/90">報告尚未全部寫完。可先閱讀以上章節，看完後按下方按鈕生成餘下部分。</p>
+            )}
             {report.error && !continuing && <p className="text-xs text-red-300">{report.error}</p>}
             <button
               type="button"
