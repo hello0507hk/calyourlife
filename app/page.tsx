@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { calculateBazi } from '@/lib/bazi';
 import { calculateQizheng, QizhengChart } from '@/lib/qizheng';
 import { computeBaziStats } from '@/lib/baziStats';
@@ -19,10 +19,12 @@ import {
   Grid,
   HelpCircle,
   Home,
+  Info,
   LayoutGrid,
   Mars,
   Maximize2,
   Minimize2,
+  MonitorSmartphone,
   Moon,
   PencilLine,
   PieChart,
@@ -33,6 +35,7 @@ import {
   User,
   Venus,
   WandSparkles,
+  X,
 } from 'lucide-react';
 
 // 命盤型別定義
@@ -250,7 +253,112 @@ const FEATURES = [
   { icon: Sparkles, title: 'AI 會診', text: '多模型聯合批算，深度解盤、流年批算與問事，配圖表解讀。' },
 ];
 
+const ENTRY_NOTICES = [
+  {
+    icon: MonitorSmartphone,
+    tone: 'text-amber-400',
+    title: '請保持畫面開啟',
+    text: 'AI 運算期間，請勿縮小或關閉視窗，並保持屏幕開啟，否則運算可能中斷。',
+  },
+  {
+    icon: Clock,
+    tone: 'text-amber-400',
+    title: '需時約 5–10 分鐘',
+    text: '整個運算過程繁複，由多個 AI 模型會診及總審，請耐心等候。',
+  },
+  {
+    icon: AlertTriangle,
+    tone: 'text-red-300',
+    title: '結果未必 100% 準確',
+    text: '如有需要，請尋求專業算命師的協助。',
+  },
+  {
+    icon: Info,
+    tone: 'text-sky-300',
+    title: '只供參考',
+    text: '算命並非精密科學，所有分析意見只供參考。',
+  },
+];
+
+function EntryNotice({ onConfirm, onClose }: { onConfirm: () => void; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = overflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/80 p-3 backdrop-blur-sm sm:items-center sm:p-6"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="entry-notice-title"
+        onClick={(e) => e.stopPropagation()}
+        className="pb-safe relative w-full max-w-md rounded-2xl border border-amber-500/30 bg-slate-900 p-5 text-left shadow-2xl shadow-black/50 sm:p-6"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="關閉"
+          className="absolute right-3 top-3 inline-flex size-9 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+        >
+          <X className="size-4" />
+        </button>
+
+        <div className="mb-4 flex items-center gap-2.5">
+          <LogoMark size={36} />
+          <h2 id="entry-notice-title" className="font-serif text-lg font-bold text-amber-100">
+            開始前請留意
+          </h2>
+        </div>
+
+        <ul className="flex flex-col gap-3">
+          {ENTRY_NOTICES.map(({ icon: Icon, tone, title, text }) => (
+            <li key={title} className="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+              <Icon className={`mt-0.5 size-5 shrink-0 ${tone}`} />
+              <div>
+                <div className="text-sm font-bold text-slate-100">{title}</div>
+                <p className="mt-0.5 text-[13px] leading-relaxed text-slate-400">{text}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-12 flex-1 rounded-xl border border-slate-700 text-sm font-medium text-slate-300 hover:bg-slate-800"
+          >
+            返回
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            autoFocus
+            className="inline-flex h-12 flex-[2] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 font-serif text-base font-bold text-slate-950 active:scale-[0.98]"
+          >
+            我明白，開始排盤
+            <ArrowRight className="size-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LandingPage({ onEnter }: { onEnter: () => void }) {
+  const [showNotice, setShowNotice] = useState(false);
+  const closeNotice = useCallback(() => setShowNotice(false), []);
+
   return (
     <div className="relative flex min-h-[100svh] w-full flex-col items-center justify-center overflow-hidden px-5 py-12 text-slate-100">
       <div className="pointer-events-none absolute -top-40 left-1/2 size-[560px] -translate-x-1/2 rounded-full bg-amber-500/10 blur-[120px]" />
@@ -282,7 +390,7 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
 
         <button
           type="button"
-          onClick={onEnter}
+          onClick={() => setShowNotice(true)}
           className="group mt-9 inline-flex h-14 w-full max-w-xs items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 font-serif text-lg font-bold text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.3)] transition-transform active:scale-95 sm:hover:scale-105"
         >
           開始排盤
@@ -303,6 +411,8 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
           ))}
         </div>
       </div>
+
+      {showNotice && <EntryNotice onConfirm={onEnter} onClose={closeNotice} />}
     </div>
   );
 }
@@ -767,7 +877,7 @@ function AiLoading() {
     <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
       <div className="flex items-center gap-2 text-xs text-amber-300">
         <LogoMark size={22} animated />
-        多個 AI 模型正在會診，約需 3–10 分鐘，請勿關閉頁面…
+        多個 AI 模型正在會診，約需 5–10 分鐘，請勿關閉頁面或關閉屏幕…
       </div>
       {[90, 75, 82, 60].map((w, i) => (
         <div key={i} className="h-3 animate-pulse rounded bg-slate-800" style={{ width: `${w}%` }} />
