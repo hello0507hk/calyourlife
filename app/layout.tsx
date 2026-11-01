@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Noto_Serif_TC } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -10,13 +10,6 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
-});
-
-const notoSerifTC = Noto_Serif_TC({
-  variable: "--font-noto-serif-tc",
-  weight: ["500", "700"],
-  preload: false,
-  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -40,8 +33,17 @@ export default function RootLayout({
   return (
     <html
       lang="zh-Hant"
-      className={`${geistSans.variable} ${geistMono.variable} ${notoSerifTC.variable} dark h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
+      <head>
+        {/* Loaded at runtime: next/font splits this CJK font into 200+ build-time downloads that intermittently fail on Vercel. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&display=swap"
+        />
+      </head>
       <body className="min-h-full flex flex-col bg-slate-950 text-slate-100">
         {children}
       </body>

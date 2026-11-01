@@ -9,6 +9,10 @@
   --font-serif: var(--font-noto-serif-tc), "Songti TC", "Noto Serif TC", "PMingLiU", serif;
 }
 
+:root {
+  --font-noto-serif-tc: "Noto Serif TC";
+}
+
 html,
 body {
   background-color: #020617 !important;
