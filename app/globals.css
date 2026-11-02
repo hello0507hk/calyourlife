@@ -11,6 +11,10 @@
 
 :root {
   --font-noto-serif-tc: "Noto Serif TC";
+  --score-good: #34d399;
+  --score-fair: #fbbf24;
+  --score-weak: #fb923c;
+  --score-bad: #f87171;
 }
 
 html,
@@ -109,6 +113,11 @@ body {
     --color-violet-400: #7c3aed;
     --color-fuchsia-300: #a21caf;
     --color-orange-300: #c2410c;
+
+    --score-good: #059669;
+    --score-fair: #d97706;
+    --score-weak: #ea580c;
+    --score-bad: #dc2626;
   }
 
   html,

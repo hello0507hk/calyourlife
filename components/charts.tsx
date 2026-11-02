@@ -17,10 +17,10 @@ const polar = (cx: number, cy: number, r: number, deg: number) => {
 };
 
 export function scoreColor(score: number) {
-  if (score >= 75) return '#34d399';
-  if (score >= 60) return '#fbbf24';
-  if (score >= 45) return '#fb923c';
-  return '#f87171';
+  if (score >= 75) return 'var(--score-good)';
+  if (score >= 60) return 'var(--score-fair)';
+  if (score >= 45) return 'var(--score-weak)';
+  return 'var(--score-bad)';
 }
 
 export function scoreLabel(score: number) {
@@ -43,7 +43,7 @@ export function WuxingDonut({ values, dayElement }: { values: Record<WuxingName,
   return (
     <div className="flex items-center gap-4">
       <svg viewBox="0 0 140 140" className="size-32 shrink-0 sm:size-36">
-        <circle cx="70" cy="70" r={R} fill="none" stroke="#1e293b" strokeWidth="16" />
+        <circle cx="70" cy="70" r={R} fill="none" className="stroke-slate-800" strokeWidth="16" />
         {WUXING_ORDER.map((el, i) => (
           <circle
             key={el}
@@ -154,24 +154,24 @@ export function RadarChart({ items }: { items: { label: string; value: number }[
           key={f}
           points={items.map((_, i) => polar(cx, cy, R * f, i * step).join(',')).join(' ')}
           fill="none"
-          stroke="#334155"
+          className="stroke-slate-700"
           strokeWidth={f === 1 ? 1 : 0.6}
         />
       ))}
       {items.map((_, i) => {
         const [x, y] = polar(cx, cy, R, i * step);
-        return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="#334155" strokeWidth="0.6" />;
+        return <line key={i} x1={cx} y1={cy} x2={x} y2={y} className="stroke-slate-700" strokeWidth="0.6" />;
       })}
-      <polygon points={pts.map((p) => p.join(',')).join(' ')} fill="rgba(251,191,36,0.22)" stroke="#fbbf24" strokeWidth="1.6" strokeLinejoin="round" />
+      <polygon points={pts.map((p) => p.join(',')).join(' ')} style={{ fill: 'var(--score-fair)', fillOpacity: 0.22, stroke: 'var(--score-fair)' }} strokeWidth="1.6" strokeLinejoin="round" />
       {pts.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r="2.6" fill={scoreColor(items[i].value)} />
+        <circle key={i} cx={x} cy={y} r="2.6" style={{ fill: scoreColor(items[i].value) }} />
       ))}
       {items.map((it, i) => {
         const [x, y] = polar(cx, cy, R + 18, i * step);
         return (
           <g key={it.label}>
             <text x={x} y={y - 2} textAnchor="middle" className="fill-slate-200 text-[11px]">{it.label}</text>
-            <text x={x} y={y + 11} textAnchor="middle" className="text-[10px] font-bold tabular-nums" fill={scoreColor(it.value)}>
+            <text x={x} y={y + 11} textAnchor="middle" className="text-[10px] font-bold tabular-nums" style={{ fill: scoreColor(it.value) }}>
               {Math.round(it.value)}
             </text>
           </g>
@@ -206,13 +206,13 @@ export function TrendChart({
       <svg viewBox={`0 0 ${W} ${H}`} style={{ minWidth: W }} className="w-full">
         <defs>
           <linearGradient id="trend-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#fbbf24" stopOpacity="0.35" />
-            <stop offset="1" stopColor="#fbbf24" stopOpacity="0" />
+            <stop offset="0" style={{ stopColor: 'var(--score-fair)' }} stopOpacity="0.35" />
+            <stop offset="1" style={{ stopColor: 'var(--score-fair)' }} stopOpacity="0" />
           </linearGradient>
         </defs>
         {[25, 50, 75].map((v) => (
           <g key={v}>
-            <line x1={padX - 8} x2={W - padX + 8} y1={y(v)} y2={y(v)} stroke="#1e293b" strokeDasharray="3 4" />
+            <line x1={padX - 8} x2={W - padX + 8} y1={y(v)} y2={y(v)} className="stroke-slate-800" strokeDasharray="3 4" />
             <text x={4} y={y(v) + 3} className="fill-slate-600 text-[8px]">{v}</text>
           </g>
         ))}
@@ -220,11 +220,11 @@ export function TrendChart({
           <rect x={x(highlightIndex) - 22} y={top - 12} width={44} height={bottom - top + 50} rx={8} fill="rgba(251,191,36,0.08)" stroke="rgba(251,191,36,0.4)" />
         )}
         <path d={area} fill="url(#trend-fill)" />
-        <path d={line} fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <path d={line} fill="none" style={{ stroke: 'var(--score-fair)' }} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         {points.map((p, i) => (
           <g key={i}>
-            <circle cx={x(i)} cy={y(p.value)} r="4" fill="#020617" stroke={scoreColor(p.value)} strokeWidth="2" />
-            <text x={x(i)} y={y(p.value) - 9} textAnchor="middle" className="text-[10px] font-bold tabular-nums" fill={scoreColor(p.value)}>
+            <circle cx={x(i)} cy={y(p.value)} r="4" className="fill-slate-950" style={{ stroke: scoreColor(p.value) }} strokeWidth="2" />
+            <text x={x(i)} y={y(p.value) - 9} textAnchor="middle" className="text-[10px] font-bold tabular-nums" style={{ fill: scoreColor(p.value) }}>
               {Math.round(p.value)}
             </text>
             <text x={x(i)} y={bottom + 18} textAnchor="middle" className="fill-slate-200 font-serif text-[12px]">{p.label}</text>
@@ -267,16 +267,16 @@ export function ScoreGauge({ score, label, caption }: { score: number; label?: s
   return (
     <div className="flex flex-col items-center">
       <svg viewBox="0 0 140 84" className="w-40">
-        <path d="M16 74 A54 54 0 0 1 124 74" fill="none" stroke="#1e293b" strokeWidth="12" strokeLinecap="round" />
+        <path d="M16 74 A54 54 0 0 1 124 74" fill="none" className="stroke-slate-800" strokeWidth="12" strokeLinecap="round" />
         <path
           d="M16 74 A54 54 0 0 1 124 74"
           fill="none"
-          stroke={color}
+          style={{ stroke: color }}
           strokeWidth="12"
           strokeLinecap="round"
           strokeDasharray={`${(s / 100) * half} ${half}`}
         />
-        <text x="70" y="62" textAnchor="middle" className="text-[26px] font-bold tabular-nums" fill={color}>{Math.round(s)}</text>
+        <text x="70" y="62" textAnchor="middle" className="text-[26px] font-bold tabular-nums" style={{ fill: color }}>{Math.round(s)}</text>
         <text x="70" y="78" textAnchor="middle" className="fill-slate-400 text-[10px]">{label ?? scoreLabel(s)}</text>
       </svg>
       {caption && <span className="mt-1 text-xs text-slate-400">{caption}</span>}
