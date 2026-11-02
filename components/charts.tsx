@@ -219,7 +219,8 @@ export function TrendChart({
         {highlightIndex !== undefined && highlightIndex >= 0 && (
           <rect x={x(highlightIndex) - 22} y={top - 12} width={44} height={bottom - top + 50} rx={8} fill="rgba(251,191,36,0.08)" stroke="rgba(251,191,36,0.4)" />
         )}
-        <path d={area} fill="url(#trend-fill)" />
+        {/* PDF renderers drop gradient stop opacity, so print uses a flat translucent fill instead. */}
+        <path d={area} fill="url(#trend-fill)" className="print:[fill-opacity:0.14] print:[fill:var(--score-fair)]" />
         <path d={line} fill="none" style={{ stroke: 'var(--score-fair)' }} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         {points.map((p, i) => (
           <g key={i}>
