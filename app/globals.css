@@ -189,4 +189,30 @@ body {
     font-size: 10.5pt !important;
     line-height: 1.6 !important;
   }
+
+  /* Anything after a heading that can't split (flex lists, unbreakable blocks, scroll containers)
+     gets pushed to the next page whole, leaving a blank gap under the heading. */
+  .prose-report ul,
+  .prose-report ol {
+    display: block !important;
+  }
+  .prose-report * {
+    break-inside: auto;
+  }
+  .prose-report div,
+  .prose-report pre {
+    overflow: visible !important;
+  }
+  .prose-report li {
+    margin-bottom: 0.35em;
+    orphans: 2;
+    widows: 2;
+  }
+  .prose-report :is(h2, h3, h4),
+  .prose-report tr {
+    break-inside: avoid;
+  }
+  .prose-report :is(h2, h3, h4) {
+    break-after: avoid;
+  }
 }
