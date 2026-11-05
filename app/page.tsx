@@ -9,6 +9,7 @@ import { QizhengGods, QizhengHouseGrid, QizhengStarTable, QizhengSummary } from 
 import { Logo, LogoMark } from '@/components/Logo';
 import { BalanceBar, TenGodBars, WuxingDonut } from '@/components/charts';
 import ReportView from '@/components/ReportView';
+import { trackEvent } from '@/components/SiteTracker';
 import {
   AlertTriangle,
   ArrowRight,
@@ -1306,6 +1307,7 @@ export default function Page() {
         longitude: Number(formData.longitude), occupation: formData.occupation, maritalStatus: formData.maritalStatus, qizhengData: qizheng,
       });
       setLoading(false);
+      trackEvent('chart');
       if (window.matchMedia('(max-width: 1023px)').matches) {
         requestAnimationFrame(() => document.getElementById('bazi')?.scrollIntoView({ behavior: 'smooth' }));
       }

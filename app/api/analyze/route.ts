@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
+import { AI_SERVICES, recordService } from '@/lib/stats';
 import { ADMIN_REFERENCE_DOCS } from '@/lib/adminKnowledge';
 import { QIZHENG_REFERENCE_DOCS } from '@/lib/qizhengKnowledge';
 import { calculateQizheng, ZODIAC_BRANCHES } from '@/lib/qizheng';
@@ -8,15 +9,6 @@ export const dynamic = 'force-dynamic';
 
 // 2. 超時限制（Vercel Pro 上限 800 秒；Hobby 上限 300 秒）
 export const maxDuration = 800;
-
-// 初始化全域統計變數 (供後台 /admin 讀取實時數據)
-if (!(global as any).__site_stats) {
-  (global as any).__site_stats = {
-    totalCalls: 0,
-    callsToday: 0,
-    logs: [],
-  };
-}
 
 // 自動計算干支年份
 function getYearGanZhi(year: number): string {
@@ -540,17 +532,8 @@ export async function POST(req: Request) {
     const resumeState: ResumeState | null =
       resume && Array.isArray(resume.done) && resume.drafts ? resume : null;
 
-    // 紀錄實時呼叫至後台計數器
-    if ((global as any).__site_stats) {
-      (global as any).__site_stats.totalCalls += 1;
-      (global as any).__site_stats.callsToday += 1;
-      (global as any).__site_stats.logs.push({
-        time: new Date().toLocaleTimeString('zh-TW', { timeZone: 'Asia/Hong_Kong' }),
-        level: 'INFO',
-        model: 'Multi-AI (星平合參)',
-        message: `收到八字與七政會診請求 (類型: ${type || 'deep'})`,
-      });
-    }
+    const service = resumeState ? 'continue' : AI_SERVICES.includes(type) ? type : 'other';
+    after(() => recordService(service).catch((e) => console.error('[stats] record failed', e)));
 
     const deepseekKey = process.env.DEEPSEEK_API_KEY?.trim();
     const dashscopeKey = process.env.QWEN_API_KEY?.trim();
@@ -929,6 +912,7 @@ ${i === 0 ? '本段結束時不要輸出 JSON 評分。' : `上一段已完成�
     }
 
     if (!finalReport) {
+      after(() => recordService('failed').catch((e) => console.error('[stats] record failed', e)));
       return NextResponse.json(
         {
           error: 'Gemini 總審閱未能完成，分析失敗。請按「重新批算」再試一次。',
