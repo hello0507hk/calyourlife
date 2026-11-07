@@ -3,9 +3,13 @@ import { recordService, recordVisit } from '@/lib/stats';
 
 const CLIENT_EVENTS = new Set(['chart']);
 
+// Next's isBot only knows the big crawlers; headless renderers (Vercel deployment
+// screenshots, Lighthouse, uptime checks) run the page's JS and would count as visits.
+const AUTOMATED_UA = /bot|crawl|spider|headless|lighthouse|vercel|screenshot|puppeteer|playwright|python|curl|wget|node-fetch|axios/i;
+
 export async function POST(req: NextRequest) {
-  const { isBot, device } = userAgent(req);
-  if (isBot) return new Response(null, { status: 204 });
+  const { isBot, device, ua } = userAgent(req);
+  if (isBot || !ua || AUTOMATED_UA.test(ua)) return new Response(null, { status: 204 });
 
   let body: { event?: string; visitorId?: string; referrer?: string };
   try {
