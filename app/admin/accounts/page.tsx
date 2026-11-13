@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, FolderOpen, Loader2, Save, Shield } from 'lucide-react';
+import { ArrowLeft, FolderOpen, Loader2, Save, Search, Shield } from 'lucide-react';
 import type { ChartSnapshot, ReportMeta, UserAccountSummary } from '@/lib/userStore';
 
 const REPORT_LABEL: Record<string, string> = {
@@ -15,6 +15,7 @@ type ReportFull = { meta: ReportMeta; text: string };
 
 export default function AdminAccountsPage() {
   const [accounts, setAccounts] = useState<UserAccountSummary[]>([]);
+  const [accountQuery, setAccountQuery] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [selectedUid, setSelectedUid] = useState<string | null>(null);
@@ -51,6 +52,12 @@ export default function AdminAccountsPage() {
   useEffect(() => {
     loadAccounts();
   }, [loadAccounts]);
+
+  const filteredAccounts = accounts.filter((a) => {
+    const q = accountQuery.trim().toLowerCase();
+    if (!q) return true;
+    return a.email.toLowerCase().includes(q) || a.uid.toLowerCase().includes(q);
+  });
 
   const openUser = async (account: UserAccountSummary) => {
     setSelectedUid(account.uid);
@@ -204,15 +211,27 @@ export default function AdminAccountsPage() {
               重新整理
             </button>
           </div>
+          <label className="relative mb-2 block">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-slate-500" />
+            <input
+              type="search"
+              value={accountQuery}
+              onChange={(e) => setAccountQuery(e.target.value)}
+              placeholder="搜尋電郵…"
+              className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 py-1.5 pr-3 pl-8 text-xs text-slate-100 outline-none placeholder:text-slate-600 focus:border-amber-500"
+            />
+          </label>
           {busy && !accounts.length ? (
             <div className="flex items-center gap-2 text-sm text-slate-400">
               <Loader2 className="size-4 animate-spin" /> 載入中…
             </div>
           ) : accounts.length === 0 ? (
             <p className="text-sm text-slate-500">尚未有登入帳號。</p>
+          ) : filteredAccounts.length === 0 ? (
+            <p className="text-sm text-slate-500">沒有符合「{accountQuery.trim()}」的帳號。</p>
           ) : (
             <ul className="flex max-h-[70vh] flex-col gap-1 overflow-auto">
-              {accounts.map((a) => (
+              {filteredAccounts.map((a) => (
                 <li key={a.uid}>
                   <button
                     type="button"
