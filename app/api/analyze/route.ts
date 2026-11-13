@@ -3,6 +3,7 @@ import { AI_SERVICES, recordService } from '@/lib/stats';
 import { ADMIN_REFERENCE_DOCS } from '@/lib/adminKnowledge';
 import { QIZHENG_REFERENCE_DOCS } from '@/lib/qizhengKnowledge';
 import { calculateQizheng, ZODIAC_BRANCHES } from '@/lib/qizheng';
+import { getSession } from '@/lib/userAuth';
 
 // 1. 強制動態獲取環境變數，禁止靜態快取
 export const dynamic = 'force-dynamic';
@@ -225,7 +226,7 @@ function scoreBlockSpec(type: string, dayyun: any[] = []) {
   if (type === 'yearly') {
     shape = JSON.stringify({
       overall: 0,
-      summary: '一句話總評（30字內）',
+      summary: '一句話總評（50字內）',
       scores: { 事業: 0, 財運: 0, 感情: 0, 健康: 0, 人際: 0, 學業: 0 },
       months: MONTH_LABELS.map((month) => ({ month, score: 0, note: '8字內重點' })),
     });
@@ -233,7 +234,7 @@ function scoreBlockSpec(type: string, dayyun: any[] = []) {
     shape = JSON.stringify({ score: 0, verdict: '吉／小吉／平／小凶／凶 擇一', summary: '一句話直接回答（30字內）' });
   } else {
     shape = JSON.stringify({
-      summary: '一句話總評（30字內）',
+      summary: '一句話總評（50字內）',
       useGod: '用神（如：丙火）',
       favorable: ['喜用五行，單字如 火'],
       unfavorable: ['忌神五行，單字如 水'],
@@ -528,6 +529,14 @@ export async function POST(req: Request) {
   const startedAt = Date.now();
 
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json(
+        { error: '請先以電郵登入，才可進行深度解盤、流年批算或問事。', code: 'LOGIN_REQUIRED' },
+        { status: 401 }
+      );
+    }
+
     const { type = 'deep', baziData, userNotes, targetYear = 2026, question, resume } = await req.json();
     const resumeState: ResumeState | null =
       resume && Array.isArray(resume.done) && resume.drafts ? resume : null;

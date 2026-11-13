@@ -32,6 +32,7 @@ import {
   Home,
   Info,
   LayoutGrid,
+  Mail,
   Mars,
   Maximize2,
   Minimize2,
@@ -1006,11 +1007,13 @@ function AiAnalysis({
   luck,
   chartForm,
   loggedIn,
+  userEmail,
 }: {
   baziData: BaziResult;
   luck: LuckPeriod[];
   chartForm: { name?: string; gender: 'male' | 'female'; minute: number; trueSolar: boolean };
   loggedIn: boolean;
+  userEmail: string | null;
 }) {
   const thisYear = new Date().getFullYear();
   const yearOptions = Array.from({ length: 13 }, (_, i) => thisYear - 2 + i);
@@ -1031,8 +1034,17 @@ function AiAnalysis({
   const yearLuck = luck.find((p) => targetYear >= p.startYear && targetYear <= p.endYear);
   const yearLabel = `${targetYear} ${yearGanZhi(targetYear)}年`;
 
+  const ensureLoggedIn = async () => {
+    if (loggedIn) return true;
+    try {
+      const me = await fetchMe();
+      return !!me.email;
+    } catch {
+      return false;
+    }
+  };
+
   const archiveReport = async (type: AnalysisType, text: string, year?: number, q?: string) => {
-    if (!loggedIn) return;
     const chart = chartPayloadFromBazi(baziData, chartForm);
     if (!chart) return;
     try {
@@ -1053,6 +1065,10 @@ function AiAnalysis({
 
   const handleGenerate = async (type: AnalysisType, questionText?: string, year = targetYear) => {
     if (loadingTab) return;
+    if (!(await ensureLoggedIn())) {
+      setArchiveNote('請先以電郵登入，才可解盤。');
+      return;
+    }
     const q = (questionText ?? question).trim();
     if (type === 'yearly_qa' && !q) return;
 
@@ -1064,6 +1080,10 @@ function AiAnalysis({
       setReports((r) => ({ ...r, [type]: { text: '', year, question: q, failed: true, error } }));
     try {
       const data = await requestReport(type, year, q);
+      if (data.code === 'LOGIN_REQUIRED' || data.error?.includes('登入')) {
+        failed(data.error || '請先以電郵登入。');
+        return;
+      }
       if (data.result) {
         const resume = data.meta?.resume ?? undefined;
         setReports((r) => ({
@@ -1100,6 +1120,10 @@ function AiAnalysis({
   const handleContinue = async (type: AnalysisType) => {
     const current = reports[type];
     if (loadingTab || !current.resume) return;
+    if (!(await ensureLoggedIn())) {
+      setArchiveNote('請先以電郵登入，才可繼續解盤。');
+      return;
+    }
     setLoadingTab(type);
     setStartedAt(nowMs());
     setContinuing(true);
@@ -1156,6 +1180,30 @@ function AiAnalysis({
       <div className="flex flex-col gap-3">
         <SegmentedTabs tabs={ANALYSIS_TABS} value={activeTab} onChange={setActiveTab} busy={loadingTab} />
 
+        {!loggedIn ? (
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-5 text-center print:hidden">
+            <Mail className="size-6 text-amber-400" />
+            <div>
+              <p className="text-sm font-bold text-amber-100">請先以電郵登入</p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-400">
+                深度解盤、流年批算與問事均需登入。完成後會自動儲存命盤資料，並把完整報告寄到你的電郵。
+              </p>
+            </div>
+            <Link
+              href="/account"
+              className="inline-flex h-11 w-full max-w-xs items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 text-sm font-bold text-slate-950"
+            >
+              <Mail className="size-4" />
+              前往電郵登入
+            </Link>
+          </div>
+        ) : (
+          <p className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-400 print:hidden">
+            已登入 <span className="text-amber-200">{userEmail}</span>
+            。解盤完成後會存入你的資料夾，並寄完整報告到此電郵。
+          </p>
+        )}
+
         {activeTab === 'deep' && (
           <p className="text-xs leading-relaxed text-slate-400 print:hidden">
             結合四柱格局、日主旺衰、喜用神，與七政四餘星曜落宮雙重會診，推算一生事業、財運、婚姻與健康，並以圖表顯示各範疇評分及大運起伏。
@@ -1179,14 +1227,15 @@ function AiAnalysis({
               onChange={(e) => setQuestion(e.target.value)}
               rows={3}
               placeholder="輸入想問的事情，例如：今年適合轉工嗎？"
-              className="w-full resize-y rounded-xl print:hidden border border-slate-800 bg-slate-950 px-3 py-2.5 text-base text-slate-100 outline-none focus:border-amber-500/80 sm:text-sm"
+              disabled={!loggedIn}
+              className="w-full resize-y rounded-xl print:hidden border border-slate-800 bg-slate-950 px-3 py-2.5 text-base text-slate-100 outline-none focus:border-amber-500/80 disabled:opacity-50 sm:text-sm"
             />
             <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 sm:flex-wrap print:hidden">
               {QUICK_QUESTIONS.map((q) => (
                 <button
                   key={q}
                   type="button"
-                  disabled={!!loadingTab}
+                  disabled={!loggedIn || !!loadingTab}
                   onClick={() => {
                     setQuestion(q);
                     handleGenerate('yearly_qa', q);
@@ -1203,13 +1252,25 @@ function AiAnalysis({
         <button
           type="button"
           onClick={() => handleGenerate(activeTab)}
-          disabled={!!loadingTab || (activeTab === 'yearly_qa' && !question.trim())}
+          disabled={!loggedIn || !!loadingTab || (activeTab === 'yearly_qa' && !question.trim())}
           className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 text-[15px] font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition-transform active:scale-[0.98] disabled:opacity-60"
         >
           <Sparkles className="size-4" />
-          {activeTab === 'deep' && (loading ? 'AI 多模型會診中…' : report.text ? '重新生成深度解盤' : '生成深度解盤')}
-          {activeTab === 'yearly' && (loading ? `批算【${yearLabel}】中…` : `批算【${yearLabel}】流年`)}
-          {activeTab === 'yearly_qa' && (loading ? '推算問事中…' : `就【${yearLabel}】問事`)}
+          {!loggedIn
+            ? '請先登入後再解盤'
+            : activeTab === 'deep'
+              ? loading
+                ? 'AI 多模型會診中…'
+                : report.text
+                  ? '重新生成深度解盤'
+                  : '生成深度解盤'
+              : activeTab === 'yearly'
+                ? loading
+                  ? `批算【${yearLabel}】中…`
+                  : `批算【${yearLabel}】流年`
+                : loading
+                  ? '推算問事中…'
+                  : `就【${yearLabel}】問事`}
         </button>
         {loadingTab && loadingTab !== activeTab && (
           <p className="text-center text-[11px] text-slate-500">
@@ -1228,7 +1289,7 @@ function AiAnalysis({
             <button
               type="button"
               onClick={() => handleGenerate(activeTab, report.question, report.year)}
-              disabled={!!loadingTab}
+              disabled={!loggedIn || !!loadingTab}
               className="inline-flex h-11 w-full max-w-xs items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 text-sm font-bold text-slate-950 disabled:opacity-60"
             >
               <RotateCcw className="size-4" />
@@ -1244,17 +1305,23 @@ function AiAnalysis({
             luck={luck.map(({ ganZhi, startYear, endYear, current }) => ({ ganZhi, startYear, endYear, current }))}
           />
         )}
-        {archiveNote && report.text && !loading && (
-          <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-200 print:hidden">
+        {archiveNote && (
+          <p
+            className={`rounded-lg px-3 py-2 text-xs print:hidden ${
+              archiveNote.includes('請先')
+                ? 'border border-amber-500/30 bg-amber-500/5 text-amber-100'
+                : 'border border-emerald-500/30 bg-emerald-500/5 text-emerald-200'
+            }`}
+          >
             {archiveNote}
-          </p>
-        )}
-        {!loggedIn && report.text && !report.resume && !loading && (
-          <p className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-400 print:hidden">
-            <Link href="/account" className="text-amber-300 underline underline-offset-2">
-              登入電郵
-            </Link>
-            {' '}後，完整報告會自動存入你的資料夾並寄到信箱。
+            {archiveNote.includes('請先') && (
+              <>
+                {' '}
+                <Link href="/account" className="underline underline-offset-2">
+                  前往登入
+                </Link>
+              </>
+            )}
           </p>
         )}
         {report.resume != null && report.text && (!loading || continuing) && (
@@ -1268,7 +1335,7 @@ function AiAnalysis({
             <button
               type="button"
               onClick={() => handleContinue(activeTab)}
-              disabled={!!loadingTab}
+              disabled={!loggedIn || !!loadingTab}
               className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-500/60 bg-slate-950 text-sm font-bold text-amber-300 transition-colors hover:bg-amber-500/10 disabled:opacity-60"
             >
               {continuing ? <LogoMark size={18} animated /> : <ArrowRight className="size-4" />}
@@ -1485,7 +1552,13 @@ export default function Page() {
                 <LuckSection luck={luck} qiyunText={baziData.qiyunText} />
                 <ChartOverview bazi={baziData} />
                 {baziData.qizhengData && <QizhengSection data={baziData.qizhengData} />}
-                <AiAnalysis baziData={baziData} luck={luck} chartForm={chartForm} loggedIn={loggedIn} />
+                <AiAnalysis
+                  baziData={baziData}
+                  luck={luck}
+                  chartForm={chartForm}
+                  loggedIn={loggedIn}
+                  userEmail={userEmail}
+                />
               </>
             ) : (
               <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-800 px-6 py-16 text-center">

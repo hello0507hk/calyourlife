@@ -175,8 +175,16 @@ export default function AccountPage() {
           </div>
         ) : me.email ? (
           <>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">
-              已登入：<span className="font-medium text-amber-200">{me.email}</span>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">
+              <span>
+                已登入：<span className="font-medium text-amber-200">{me.email}</span>
+              </span>
+              <Link
+                href="/"
+                className="inline-flex h-8 items-center rounded-lg bg-gradient-to-r from-amber-500 to-amber-400 px-3 text-xs font-bold text-slate-950"
+              >
+                返回排盤解盤
+              </Link>
             </div>
 
             <section className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 sm:p-5">
