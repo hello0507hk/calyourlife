@@ -9,6 +9,7 @@ import { QizhengGods, QizhengHouseGrid, QizhengStarTable, QizhengSummary } from 
 import { Logo, LogoMark } from '@/components/Logo';
 import { BalanceBar, TenGodBars, WuxingDonut } from '@/components/charts';
 import ReportView from '@/components/ReportView';
+import SocialLinks from '@/components/SocialLinks';
 import { trackEvent } from '@/components/SiteTracker';
 import {
   chartPayloadFromBazi,
@@ -411,6 +412,11 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
           開始排盤
           <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" />
         </button>
+
+        <div className="mt-6 flex flex-col items-center gap-2">
+          <p className="text-[11px] tracking-widest text-slate-500">關注我們</p>
+          <SocialLinks />
+        </div>
 
         <div className="mt-12 grid w-full gap-3 sm:grid-cols-3">
           {FEATURES.map(({ icon: Icon, title, text }) => (
@@ -1605,6 +1611,7 @@ export default function Page() {
             <Logo size={36} />
           </button>
           <div className="flex items-center gap-2">
+            <SocialLinks compact className="print:hidden" />
             <Link
               href="/account"
               className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 text-xs text-slate-300"
