@@ -1,6 +1,17 @@
-import type { ChartSnapshot } from '@/lib/userStore';
+import { chartIdFromBirth } from '@/lib/chartIdentity';
+import type { ChartSnapshot, ReportMeta } from '@/lib/userStore';
+
+export { chartIdFromBirth };
 
 export type AuthMe = { email: string | null; redis: boolean; emailConfigured: boolean };
+
+export type HydratedReport = ReportMeta & { text: string };
+
+export type SavedReportBundle = {
+  deep?: HydratedReport;
+  yearly: Record<number, HydratedReport>;
+  yearlyQa: HydratedReport[];
+};
 
 export async function fetchMe(): Promise<AuthMe> {
   const res = await fetch('/api/auth/me', { cache: 'no-store' });
@@ -82,17 +93,27 @@ export function chartPayloadFromBazi(
     form?.gender ||
     (bazi.genderText?.includes('坤') || bazi.genderText?.includes('女') ? 'female' : 'male');
 
-  return {
-    id: '',
-    savedAt: Date.now(),
-    name: form?.name,
-    gender,
+  const snap = {
     year: Number(year),
     month: Number(month),
     day: Number(day),
     hour: Number(hour),
     minute: Number(form?.minute ?? 0),
+    gender,
     longitude: Number(longitude),
+  };
+
+  return {
+    id: chartIdFromBirth(snap),
+    savedAt: Date.now(),
+    name: form?.name,
+    gender,
+    year: snap.year,
+    month: snap.month,
+    day: snap.day,
+    hour: snap.hour,
+    minute: snap.minute,
+    longitude: snap.longitude,
     trueSolar: form?.trueSolar ?? true,
     occupation: bazi.occupation,
     maritalStatus: bazi.maritalStatus,
@@ -101,6 +122,23 @@ export function chartPayloadFromBazi(
     pillarsText: bazi.eightChar ? pillarsTextFromBazi(bazi.eightChar) : undefined,
     solarDate: bazi.solarDate,
   };
+}
+
+export async function fetchHydratedReports(chartId: string): Promise<SavedReportBundle> {
+  const res = await fetch(`/api/account/reports?chartId=${encodeURIComponent(chartId)}&hydrate=1`, {
+    cache: 'no-store',
+  });
+  if (!res.ok) return { yearly: {}, yearlyQa: [] };
+  const data = await res.json();
+  const list = (data.reports || []) as HydratedReport[];
+  const bundle: SavedReportBundle = { yearly: {}, yearlyQa: [] };
+  for (const r of list) {
+    if (!r.text) continue;
+    if (r.type === 'deep' && !bundle.deep) bundle.deep = r;
+    else if (r.type === 'yearly' && r.year != null && !bundle.yearly[r.year]) bundle.yearly[r.year] = r;
+    else if (r.type === 'yearly_qa') bundle.yearlyQa.push(r);
+  }
+  return bundle;
 }
 
 export async function saveChartToAccount(chart: ChartSnapshot) {

@@ -1,5 +1,8 @@
+import { chartIdFromBirth } from '@/lib/chartIdentity';
 import { redis } from '@/lib/redis';
 import { splitReport } from '@/lib/reportFormat';
+
+export { chartIdFromBirth };
 
 const MAX_CHARTS = 40;
 const MAX_REPORTS = 80;
@@ -46,19 +49,6 @@ function reportsKey(uid: string) {
 }
 function reportBodyKey(uid: string, reportId: string) {
   return `user:${uid}:report:${reportId}`;
-}
-
-export function chartIdFromBirth(input: {
-  year: number;
-  month: number;
-  day: number;
-  hour: number;
-  minute: number;
-  gender: string;
-  longitude: number;
-}) {
-  const lon = Number(input.longitude).toFixed(2);
-  return `c_${input.year}${String(input.month).padStart(2, '0')}${String(input.day).padStart(2, '0')}_${String(input.hour).padStart(2, '0')}${String(input.minute).padStart(2, '0')}_${input.gender}_${lon}`;
 }
 
 function asRecord(value: unknown): Record<string, string> {

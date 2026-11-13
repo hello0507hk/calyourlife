@@ -12,10 +12,12 @@ import ReportView from '@/components/ReportView';
 import { trackEvent } from '@/components/SiteTracker';
 import {
   chartPayloadFromBazi,
+  fetchHydratedReports,
   fetchMe,
   saveChartToAccount,
   saveReportToAccount,
   takeRestoredChart,
+  type SavedReportBundle,
 } from '@/lib/accountClient';
 import type { ChartSnapshot } from '@/lib/userStore';
 import {
@@ -871,6 +873,7 @@ interface ReportState {
   resume?: unknown;
   error?: string;
   failed?: boolean;
+  fromCache?: boolean;
 }
 
 const ANALYSIS_TABS = [
@@ -1008,12 +1011,16 @@ function AiAnalysis({
   chartForm,
   loggedIn,
   userEmail,
+  savedBundle,
+  onReportsSaved,
 }: {
   baziData: BaziResult;
   luck: LuckPeriod[];
   chartForm: { name?: string; gender: 'male' | 'female'; minute: number; trueSolar: boolean };
   loggedIn: boolean;
   userEmail: string | null;
+  savedBundle: SavedReportBundle | null;
+  onReportsSaved?: () => void;
 }) {
   const thisYear = new Date().getFullYear();
   const yearOptions = Array.from({ length: 13 }, (_, i) => thisYear - 2 + i);
@@ -1033,6 +1040,51 @@ function AiAnalysis({
 
   const yearLuck = luck.find((p) => targetYear >= p.startYear && targetYear <= p.endYear);
   const yearLabel = `${targetYear} ${yearGanZhi(targetYear)}年`;
+
+  // Same account + same chart: reuse previously saved reports (deep + this year's yearly).
+  useEffect(() => {
+    if (!savedBundle) {
+      setReports({ deep: { text: '' }, yearly: { text: '' }, yearly_qa: { text: '' } });
+      setArchiveNote('');
+      return;
+    }
+    setReports((prev) => {
+      const deepText = savedBundle.deep?.text || '';
+      const yearlyText = savedBundle.yearly[targetYear]?.text || '';
+      return {
+        deep: deepText
+          ? {
+              text: deepText,
+              fromCache: prev.deep.text === deepText ? !!prev.deep.fromCache : true,
+            }
+          : { text: '' },
+        yearly: yearlyText
+          ? {
+              text: yearlyText,
+              year: targetYear,
+              fromCache: prev.yearly.text === yearlyText ? !!prev.yearly.fromCache : true,
+            }
+          : { text: '', year: targetYear },
+        yearly_qa:
+          prev.yearly_qa?.text && !prev.yearly_qa.fromCache
+            ? prev.yearly_qa
+            : { text: '', year: targetYear, question: prev.yearly_qa?.question || '' },
+      };
+    });
+  }, [savedBundle, targetYear]);
+
+  const loadCachedQa = (q: string, year: number) => {
+    const hit = savedBundle?.yearlyQa.find(
+      (r) => r.year === year && (r.question || '').trim() === q.trim()
+    );
+    if (!hit?.text) return false;
+    setReports((r) => ({
+      ...r,
+      yearly_qa: { text: hit.text, year, question: q.trim(), fromCache: true },
+    }));
+    setArchiveNote('已載入此問事先前儲存的解盤資料。可直接查閱；若要更新再按重新生成。');
+    return true;
+  };
 
   const ensureLoggedIn = async () => {
     if (loggedIn) return true;
@@ -1058,12 +1110,18 @@ function AiAnalysis({
       });
       if (result.emailed) setArchiveNote('報告已存入你的電郵資料夾，並已寄到你的電郵。');
       else setArchiveNote(result.emailError || '報告已存入你的電郵資料夾。');
+      onReportsSaved?.();
     } catch {
       setArchiveNote('報告存檔或寄信失敗，可稍後在「我的命盤」重試。');
     }
   };
 
-  const handleGenerate = async (type: AnalysisType, questionText?: string, year = targetYear) => {
+  const handleGenerate = async (
+    type: AnalysisType,
+    questionText?: string,
+    year = targetYear,
+    opts?: { force?: boolean }
+  ) => {
     if (loadingTab) return;
     if (!(await ensureLoggedIn())) {
       setArchiveNote('請先以電郵登入，才可解盤。');
@@ -1071,6 +1129,9 @@ function AiAnalysis({
     }
     const q = (questionText ?? question).trim();
     if (type === 'yearly_qa' && !q) return;
+
+    // Same chart + same question: reuse saved Q&A unless explicitly regenerating.
+    if (type === 'yearly_qa' && !opts?.force && loadCachedQa(q, year)) return;
 
     setLoadingTab(type);
     setStartedAt(nowMs());
@@ -1238,7 +1299,7 @@ function AiAnalysis({
                   disabled={!loggedIn || !!loadingTab}
                   onClick={() => {
                     setQuestion(q);
-                    handleGenerate('yearly_qa', q);
+                    if (!loadCachedQa(q, targetYear)) handleGenerate('yearly_qa', q, targetYear, { force: true });
                   }}
                   className="h-9 shrink-0 rounded-full border border-slate-700 bg-slate-950 px-3 text-xs text-slate-300 transition-colors hover:border-amber-500/60 hover:text-amber-300 disabled:opacity-50"
                 >
@@ -1251,7 +1312,7 @@ function AiAnalysis({
 
         <button
           type="button"
-          onClick={() => handleGenerate(activeTab)}
+          onClick={() => handleGenerate(activeTab, undefined, targetYear, { force: true })}
           disabled={!loggedIn || !!loadingTab || (activeTab === 'yearly_qa' && !question.trim())}
           className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 text-[15px] font-bold text-slate-950 shadow-lg shadow-amber-500/20 transition-transform active:scale-[0.98] disabled:opacity-60"
         >
@@ -1288,7 +1349,7 @@ function AiAnalysis({
             </div>
             <button
               type="button"
-              onClick={() => handleGenerate(activeTab, report.question, report.year)}
+              onClick={() => handleGenerate(activeTab, report.question, report.year, { force: true })}
               disabled={!loggedIn || !!loadingTab}
               className="inline-flex h-11 w-full max-w-xs items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 text-sm font-bold text-slate-950 disabled:opacity-60"
             >
@@ -1304,6 +1365,11 @@ function AiAnalysis({
             targetYear={report.year}
             luck={luck.map(({ ganZhi, startYear, endYear, current }) => ({ ganZhi, startYear, endYear, current }))}
           />
+        )}
+        {report.fromCache && report.text && !loading && (
+          <p className="rounded-lg border border-sky-500/30 bg-sky-500/5 px-3 py-2 text-xs text-sky-100 print:hidden">
+            已載入此命盤先前儲存的解盤資料，可直接查閱。若要更新內容，再按重新生成。
+          </p>
         )}
         {archiveNote && (
           <p
@@ -1418,6 +1484,8 @@ export default function Page() {
     minute: 0,
     trueSolar: true,
   });
+  const [savedBundle, setSavedBundle] = useState<SavedReportBundle | null>(null);
+  const [activeChartId, setActiveChartId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMe()
@@ -1451,8 +1519,16 @@ export default function Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once on mount
   }, []);
 
+  const refreshSavedBundle = (chartId: string) => {
+    fetchHydratedReports(chartId)
+      .then((bundle) => setSavedBundle(bundle))
+      .catch(() => setSavedBundle({ yearly: {}, yearlyQa: [] }));
+  };
+
   const handleFormSubmit = (formData: any) => {
     setLoading(true);
+    setSavedBundle(null);
+    setActiveChartId(null);
     setChartForm({
       name: formData.name || '',
       gender: formData.gender,
@@ -1493,9 +1569,18 @@ export default function Page() {
         trueSolar: formData.trueSolar === 'on',
       });
       if (chart) {
+        setActiveChartId(chart.id);
         fetchMe()
-          .then((me) => (me.email ? saveChartToAccount(chart) : null))
-          .catch(() => {});
+          .then(async (me) => {
+            if (!me.email) {
+              setSavedBundle({ yearly: {}, yearlyQa: [] });
+              return;
+            }
+            await saveChartToAccount(chart);
+            const bundle = await fetchHydratedReports(chart.id);
+            setSavedBundle(bundle);
+          })
+          .catch(() => setSavedBundle({ yearly: {}, yearlyQa: [] }));
       }
 
       if (window.matchMedia('(max-width: 1023px)').matches) {
@@ -1558,6 +1643,10 @@ export default function Page() {
                   chartForm={chartForm}
                   loggedIn={loggedIn}
                   userEmail={userEmail}
+                  savedBundle={savedBundle}
+                  onReportsSaved={() => {
+                    if (activeChartId) refreshSavedBundle(activeChartId);
+                  }}
                 />
               </>
             ) : (

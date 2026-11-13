@@ -37,8 +37,35 @@ export async function GET(req: NextRequest) {
   }
 
   const chartId = req.nextUrl.searchParams.get('chartId') || undefined;
+  const hydrate = req.nextUrl.searchParams.get('hydrate') === '1';
   const reports = await listReports(session.uid, chartId);
-  return NextResponse.json({ reports });
+
+  if (!hydrate || !chartId) return NextResponse.json({ reports });
+
+  // Latest deep; latest yearly per year; latest few Q&A — with full text for reuse.
+  const picked: typeof reports = [];
+  const seenDeep = { done: false };
+  const seenYearly = new Set<number>();
+  let qaCount = 0;
+  for (const r of reports) {
+    if (r.type === 'deep' && !seenDeep.done) {
+      picked.push(r);
+      seenDeep.done = true;
+    } else if (r.type === 'yearly' && r.year != null && !seenYearly.has(r.year)) {
+      picked.push(r);
+      seenYearly.add(r.year);
+    } else if (r.type === 'yearly_qa' && qaCount < 8) {
+      picked.push(r);
+      qaCount += 1;
+    }
+  }
+
+  const hydrated = [];
+  for (const meta of picked) {
+    const full = await getReport(session.uid, meta.id);
+    if (full?.text) hydrated.push({ ...meta, text: full.text });
+  }
+  return NextResponse.json({ reports: hydrated, chartId });
 }
 
 export async function POST(req: NextRequest) {
