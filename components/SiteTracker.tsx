@@ -47,7 +47,7 @@ export default function SiteTracker() {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (visitSent || pathname.startsWith('/admin')) return;
+    if (visitSent || pathname.startsWith('/admin') || pathname.startsWith('/account')) return;
     visitSent = true;
     try {
       send({ event: 'visit', visitorId: visitorId(), referrer: externalReferrer() });

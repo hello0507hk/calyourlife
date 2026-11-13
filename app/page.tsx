@@ -11,6 +11,14 @@ import { BalanceBar, TenGodBars, WuxingDonut } from '@/components/charts';
 import ReportView from '@/components/ReportView';
 import { trackEvent } from '@/components/SiteTracker';
 import {
+  chartPayloadFromBazi,
+  fetchMe,
+  saveChartToAccount,
+  saveReportToAccount,
+  takeRestoredChart,
+} from '@/lib/accountClient';
+import type { ChartSnapshot } from '@/lib/userStore';
+import {
   AlertTriangle,
   ArrowRight,
   CalendarDays,
@@ -18,6 +26,7 @@ import {
   ChevronDown,
   Clock,
   Eye,
+  FolderOpen,
   Grid,
   HelpCircle,
   Home,
@@ -39,6 +48,7 @@ import {
   WandSparkles,
   X,
 } from 'lucide-react';
+import Link from 'next/link';
 
 // 命盤型別定義
 export interface BaziResult {
@@ -491,22 +501,24 @@ function BaziForm({
   onSubmit,
   loading,
   hasResult,
+  initial,
 }: {
   onSubmit: (formData: any) => void;
   loading: boolean;
   hasResult: boolean;
+  initial?: ChartSnapshot | null;
 }) {
-  const [name, setName] = useState('');
-  const [gender, setGender] = useState<'male' | 'female'>('male');
-  const [trueSolar, setTrueSolar] = useState('on');
-  const [longitude, setLongitude] = useState('114.17');
-  const [year, setYear] = useState('1983');
-  const [month, setMonth] = useState('11');
-  const [day, setDay] = useState('23');
-  const [hour, setHour] = useState('5');
-  const [minute, setMinute] = useState('0');
-  const [occupation, setOccupation] = useState('');
-  const [maritalStatus, setMaritalStatus] = useState('單身未婚');
+  const [name, setName] = useState(initial?.name || '');
+  const [gender, setGender] = useState<'male' | 'female'>(initial?.gender || 'male');
+  const [trueSolar, setTrueSolar] = useState(initial && initial.trueSolar === false ? 'off' : 'on');
+  const [longitude, setLongitude] = useState(initial ? String(initial.longitude) : '114.17');
+  const [year, setYear] = useState(initial ? String(initial.year) : '1983');
+  const [month, setMonth] = useState(initial ? String(initial.month) : '11');
+  const [day, setDay] = useState(initial ? String(initial.day) : '23');
+  const [hour, setHour] = useState(initial ? String(initial.hour) : '5');
+  const [minute, setMinute] = useState(initial ? String(initial.minute ?? 0) : '0');
+  const [occupation, setOccupation] = useState(initial?.occupation || '');
+  const [maritalStatus, setMaritalStatus] = useState(initial?.maritalStatus || '單身未婚');
   const [expanded, setExpanded] = useState(false);
 
   const collapsed = hasResult && !expanded;
@@ -989,7 +1001,17 @@ function AiLoading({ type, startedAt }: { type: AnalysisType | 'continue'; start
   );
 }
 
-function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod[] }) {
+function AiAnalysis({
+  baziData,
+  luck,
+  chartForm,
+  loggedIn,
+}: {
+  baziData: BaziResult;
+  luck: LuckPeriod[];
+  chartForm: { name?: string; gender: 'male' | 'female'; minute: number; trueSolar: boolean };
+  loggedIn: boolean;
+}) {
   const thisYear = new Date().getFullYear();
   const yearOptions = Array.from({ length: 13 }, (_, i) => thisYear - 2 + i);
 
@@ -1004,9 +1026,30 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
   const [loadingTab, setLoadingTab] = useState<AnalysisType | null>(null);
   const [continuing, setContinuing] = useState(false);
   const [startedAt, setStartedAt] = useState(0);
+  const [archiveNote, setArchiveNote] = useState('');
 
   const yearLuck = luck.find((p) => targetYear >= p.startYear && targetYear <= p.endYear);
   const yearLabel = `${targetYear} ${yearGanZhi(targetYear)}年`;
+
+  const archiveReport = async (type: AnalysisType, text: string, year?: number, q?: string) => {
+    if (!loggedIn) return;
+    const chart = chartPayloadFromBazi(baziData, chartForm);
+    if (!chart) return;
+    try {
+      const result = await saveReportToAccount({
+        text,
+        type,
+        year,
+        question: q,
+        chart,
+        sendEmail: true,
+      });
+      if (result.emailed) setArchiveNote('報告已存入你的電郵資料夾，並已寄到你的電郵。');
+      else setArchiveNote(result.emailError || '報告已存入你的電郵資料夾。');
+    } catch {
+      setArchiveNote('報告存檔或寄信失敗，可稍後在「我的命盤」重試。');
+    }
+  };
 
   const handleGenerate = async (type: AnalysisType, questionText?: string, year = targetYear) => {
     if (loadingTab) return;
@@ -1015,16 +1058,19 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
 
     setLoadingTab(type);
     setStartedAt(nowMs());
+    setArchiveNote('');
     setReports((r) => ({ ...r, [type]: { text: '' } }));
     const failed = (error: string) =>
       setReports((r) => ({ ...r, [type]: { text: '', year, question: q, failed: true, error } }));
     try {
       const data = await requestReport(type, year, q);
       if (data.result) {
+        const resume = data.meta?.resume ?? undefined;
         setReports((r) => ({
           ...r,
-          [type]: { text: data.result, year, question: q, resume: data.meta?.resume ?? undefined },
+          [type]: { text: data.result, year, question: q, resume },
         }));
+        if (!resume) await archiveReport(type, data.result, year, q);
       } else {
         failed(data.error || '分析失敗，請重新批算。');
       }
@@ -1060,10 +1106,12 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
     try {
       const data = await requestReport(type, current.year ?? targetYear, current.question ?? '', current.resume);
       if (data.result) {
+        const resume = data.meta?.resume ?? undefined;
         setReports((r) => ({
           ...r,
-          [type]: { ...current, text: data.result, resume: data.meta?.resume ?? undefined, error: undefined },
+          [type]: { ...current, text: data.result, resume, error: undefined },
         }));
+        if (!resume) await archiveReport(type, data.result, current.year, current.question);
       } else {
         setReports((r) => ({ ...r, [type]: { ...current, error: data.error || '續寫失敗，請再試一次。' } }));
       }
@@ -1196,6 +1244,19 @@ function AiAnalysis({ baziData, luck }: { baziData: BaziResult; luck: LuckPeriod
             luck={luck.map(({ ganZhi, startYear, endYear, current }) => ({ ganZhi, startYear, endYear, current }))}
           />
         )}
+        {archiveNote && report.text && !loading && (
+          <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-200 print:hidden">
+            {archiveNote}
+          </p>
+        )}
+        {!loggedIn && report.text && !report.resume && !loading && (
+          <p className="rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-400 print:hidden">
+            <Link href="/account" className="text-amber-300 underline underline-offset-2">
+              登入電郵
+            </Link>
+            {' '}後，完整報告會自動存入你的資料夾並寄到信箱。
+          </p>
+        )}
         {report.resume != null && report.text && (!loading || continuing) && (
           <div className="flex flex-col gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 print:hidden">
             {continuing ? (
@@ -1280,9 +1341,57 @@ export default function Page() {
   const [hasEntered, setHasEntered] = useState(false);
   const [baziData, setBaziData] = useState<BaziResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [formSeed, setFormSeed] = useState(0);
+  const [formInitial, setFormInitial] = useState<ChartSnapshot | null>(null);
+  const [chartForm, setChartForm] = useState({
+    name: '',
+    gender: 'male' as 'male' | 'female',
+    minute: 0,
+    trueSolar: true,
+  });
+
+  useEffect(() => {
+    fetchMe()
+      .then((me) => {
+        setLoggedIn(!!me.email);
+        setUserEmail(me.email);
+      })
+      .catch(() => {});
+
+    const restored = takeRestoredChart();
+    if (restored) {
+      setHasEntered(true);
+      setFormInitial(restored);
+      setFormSeed((n) => n + 1);
+      setTimeout(() => {
+        handleFormSubmit({
+          name: restored.name || '',
+          year: String(restored.year),
+          month: String(restored.month),
+          day: String(restored.day),
+          hour: String(restored.hour),
+          minute: String(restored.minute ?? 0),
+          gender: restored.gender,
+          trueSolar: restored.trueSolar ? 'on' : 'off',
+          longitude: String(restored.longitude),
+          occupation: restored.occupation || '',
+          maritalStatus: restored.maritalStatus || '單身未婚',
+        });
+      }, 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once on mount
+  }, []);
 
   const handleFormSubmit = (formData: any) => {
     setLoading(true);
+    setChartForm({
+      name: formData.name || '',
+      gender: formData.gender,
+      minute: Number(formData.minute) || 0,
+      trueSolar: formData.trueSolar === 'on',
+    });
     setTimeout(() => {
       const result = calculateBazi(
         Number(formData.year), Number(formData.month), Number(formData.day), Number(formData.hour),
@@ -1301,13 +1410,27 @@ export default function Page() {
         trueSolar: formData.trueSolar === 'on',
       });
 
-      setBaziData({
+      const next: BaziResult = {
         ...result,
         birthYear: Number(formData.year), birthMonth: Number(formData.month), birthDay: Number(formData.day), birthHour: Number(formData.hour),
         longitude: Number(formData.longitude), occupation: formData.occupation, maritalStatus: formData.maritalStatus, qizhengData: qizheng,
-      });
+      };
+      setBaziData(next);
       setLoading(false);
       trackEvent('chart');
+
+      const chart = chartPayloadFromBazi(next, {
+        name: formData.name,
+        gender: formData.gender,
+        minute: Number(formData.minute) || 0,
+        trueSolar: formData.trueSolar === 'on',
+      });
+      if (chart) {
+        fetchMe()
+          .then((me) => (me.email ? saveChartToAccount(chart) : null))
+          .catch(() => {});
+      }
+
       if (window.matchMedia('(max-width: 1023px)').matches) {
         requestAnimationFrame(() => document.getElementById('bazi')?.scrollIntoView({ behavior: 'smooth' }));
       }
@@ -1326,19 +1449,34 @@ export default function Page() {
           <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="回到頂部">
             <Logo size={36} />
           </button>
-          <button
-            type="button"
-            onClick={() => setHasEntered(false)}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 text-xs text-slate-300"
-          >
-            <Home className="size-3.5" /> 首頁
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/account"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 text-xs text-slate-300"
+            >
+              <FolderOpen className="size-3.5" />
+              {userEmail ? '我的命盤' : '登入'}
+            </Link>
+            <button
+              type="button"
+              onClick={() => setHasEntered(false)}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 text-xs text-slate-300"
+            >
+              <Home className="size-3.5" /> 首頁
+            </button>
+          </div>
         </div>
       </header>
 
       <div className="mx-auto max-w-6xl px-3 pt-4 sm:px-6 sm:pt-8 print:max-w-none print:p-0">
         <div className="grid items-start gap-4 lg:grid-cols-[320px_1fr] lg:gap-6 print:block">
-          <BaziForm onSubmit={handleFormSubmit} loading={loading} hasResult={!!baziData} />
+          <BaziForm
+            key={formSeed}
+            onSubmit={handleFormSubmit}
+            loading={loading}
+            hasResult={!!baziData}
+            initial={formInitial}
+          />
 
           <div className="flex min-w-0 flex-col gap-4 sm:gap-5 print:w-full print:gap-[4mm]">
             {baziData ? (
@@ -1347,7 +1485,7 @@ export default function Page() {
                 <LuckSection luck={luck} qiyunText={baziData.qiyunText} />
                 <ChartOverview bazi={baziData} />
                 {baziData.qizhengData && <QizhengSection data={baziData.qizhengData} />}
-                <AiAnalysis baziData={baziData} luck={luck} />
+                <AiAnalysis baziData={baziData} luck={luck} chartForm={chartForm} loggedIn={loggedIn} />
               </>
             ) : (
               <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-800 px-6 py-16 text-center">
