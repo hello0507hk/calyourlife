@@ -4,6 +4,7 @@ import { ADMIN_REFERENCE_DOCS } from '@/lib/adminKnowledge';
 import { QIZHENG_REFERENCE_DOCS } from '@/lib/qizhengKnowledge';
 import { calculateQizheng, ZODIAC_BRANCHES } from '@/lib/qizheng';
 import { getSession } from '@/lib/userAuth';
+import { findChartForBirth } from '@/lib/userStore';
 
 // 1. 強制動態獲取環境變數，禁止靜態快取
 export const dynamic = 'force-dynamic';
@@ -537,7 +538,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { type = 'deep', baziData, userNotes, targetYear = 2026, question, resume } = await req.json();
+    const { type = 'deep', baziData, userNotes, targetYear = 2026, question, resume, chartId } = await req.json();
     const resumeState: ResumeState | null =
       resume && Array.isArray(resume.done) && resume.drafts ? resume : null;
 
@@ -575,6 +576,35 @@ export async function POST(req: Request) {
     }${qizhengYearText ? `\n\n【${analysisYear} 年七政四餘流年數據】：\n${qizhengYearText}` : ''}`;
     const targetGanZhiStr = getYearGanZhi(targetYear);
 
+    // Admin / previously locked chart fields are the source of truth for later readings.
+    let chartOverrideBlock = '';
+    try {
+      const gender = String(baziData?.genderText || '').includes('坤') || String(baziData?.genderText || '').includes('女')
+        ? 'female'
+        : 'male';
+      if (Number.isFinite(Number(baziData?.birthYear)) && Number.isFinite(Number(baziData?.longitude))) {
+        const saved = await findChartForBirth(session.uid, {
+          year: Number(baziData.birthYear),
+          month: Number(baziData.birthMonth),
+          day: Number(baziData.birthDay),
+          hour: Number(baziData.birthHour),
+          gender,
+          longitude: Number(baziData.longitude),
+          chartId: typeof chartId === 'string' ? chartId : undefined,
+        });
+        if (saved?.useGod && (saved.useGodLocked || saved.adminEditedAt)) {
+          chartOverrideBlock += `\n\n【既定用神（必須嚴格遵守，不可另立用神）】：${saved.useGod}`;
+        } else if (saved?.useGod) {
+          chartOverrideBlock += `\n\n【既有用神（請保持一致）】：${saved.useGod}`;
+        }
+        if (saved?.adminNote?.trim()) {
+          chartOverrideBlock += `\n\n【管理員批註（必須參考）】：\n${saved.adminNote.trim()}`;
+        }
+      }
+    } catch (error) {
+      console.error('[analyze] chart override lookup failed', error);
+    }
+
     // 基於三大功能（deep / yearly / yearly_qa）動態選用系統提示詞與輸出格式規範
     let initialSystemPrompt = '';
     let userPromptText = '';
@@ -582,7 +612,7 @@ export async function POST(req: Request) {
     const baseExpertPersona = `你是一位跟隨徐樂吾學習八字和七政四餘多年、深得徐樂吾真傳，精通子平八字與「星平合參」（子平八字 + 七政四餘星學）的資深命理大師。
 你熟讀《滴天髓徵義》徐樂吾編註、《造化元鑰》徐樂吾評註、《神峰通考》、徐樂吾「有殺先論殺」、《子平一得》蔡進源補註、鄭希誠《鄭氏星案》、《果老星宗》與萬民英《星學大成》。
 利用子平八字扶抑、調候、通關定格局與捉用神，同時對照七政四餘黃道十二宮（官祿宮、財帛宮、夫妻宮、疾厄宮等）、日月五星與四餘（羅睺、計都、紫氣、月孛）落宮狀態，互相印證。
-嚴禁使用朱鵲橋一派的任何理論，嚴禁修改干支或自行重新計算排盤。`;
+嚴禁使用朱鵲橋一派的任何理論，嚴禁修改干支或自行重新計算排盤。${chartOverrideBlock}`;
 
     const starPingDualRules = `【星平合參雙軌批算要求（每一部分都必須遵守）】：
 1. 每一個分析部分都必須分三層，並以粗體小標題分開：
@@ -823,7 +853,7 @@ ${QIZHENG_REFERENCE_DOCS}`;
       const reviewShared = `你是一位權威八字命理與七政四餘的總審閱官，精通子平八字、《滴天髓徵義》、《造化元鑰》、《子平一得》、神峰通考、《鄭氏星案》、《果老星宗》與《星學大成》。
 請根據命盤與初稿，寫出給命主閱讀的最終報告，不要顯示審閱過程。
 用神、格局必須唯一；男命論妻、女命論夫；有殺先論殺；地支除本氣與月令藏元外不可捉用神。
-所有七政四餘論斷必須依據【指定七政四餘批算法則】；初稿中與指定法則不符的星盤論斷，一律按法則改正或刪除。
+所有七政四餘論斷必須依據【指定七政四餘批算法則】；初稿中與指定法則不符的星盤論斷，一律按法則改正或刪除。${chartOverrideBlock}
 每一分析節必須含 **子平八字**、**七政四餘**、**星平合參結論**。前兩層各 3–6 條重點；核心批斷每條一行：【吉／中吉／平／小凶／凶】＋一句人話＋括號內一句依據。
 ${
         type === 'yearly_qa'

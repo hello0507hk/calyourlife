@@ -27,6 +27,11 @@ export type ChartSnapshot = {
   pillarsText?: string;
   solarDate?: string;
   useGod?: string;
+  /** When true, AI analysis must keep this useGod; user/AI saves cannot overwrite it. */
+  useGodLocked?: boolean;
+  /** Free-text admin guidance injected into later AI prompts. */
+  adminNote?: string;
+  adminEditedAt?: number;
 };
 
 export type ReportMeta = {
@@ -39,6 +44,15 @@ export type ReportMeta = {
   useGod?: string;
   summary?: string;
   emailedAt?: number;
+  adminEditedAt?: number;
+};
+
+export type UserAccountSummary = {
+  uid: string;
+  email: string;
+  updatedAt: number;
+  chartCount: number;
+  reportCount: number;
 };
 
 function chartsKey(uid: string) {
@@ -87,16 +101,95 @@ export async function saveChart(uid: string, chart: ChartSnapshot) {
   if (!redis) throw new Error('Redis not configured');
   const key = chartsKey(uid);
   const existing = parseJson<ChartSnapshot>(await redis.hget(key, chart.id));
+  const locked = !!(existing?.useGodLocked || chart.useGodLocked);
   const next: ChartSnapshot = {
     ...existing,
     ...chart,
-    useGod: chart.useGod || existing?.useGod,
+    useGod: locked ? existing?.useGod || chart.useGod : chart.useGod || existing?.useGod,
+    useGodLocked: locked,
+    adminNote: chart.adminNote !== undefined ? chart.adminNote : existing?.adminNote,
+    adminEditedAt: chart.adminEditedAt ?? existing?.adminEditedAt,
     savedAt: Date.now(),
   };
   await redis.hset(key, { [chart.id]: JSON.stringify(next) });
   await redis.expire(key, RETENTION_SECONDS);
   await pruneHash(key, MAX_CHARTS, (item) => Number(item.savedAt) || 0);
   return next;
+}
+
+/** Admin overwrite — may change locked useGod and notes. */
+export async function adminSaveChart(uid: string, chart: ChartSnapshot) {
+  if (!redis) throw new Error('Redis not configured');
+  const key = chartsKey(uid);
+  const existing = parseJson<ChartSnapshot>(await redis.hget(key, chart.id));
+  const next: ChartSnapshot = {
+    ...existing,
+    ...chart,
+    useGodLocked: chart.useGodLocked ?? true,
+    adminEditedAt: Date.now(),
+    savedAt: Date.now(),
+  };
+  await redis.hset(key, { [chart.id]: JSON.stringify(next) });
+  await redis.expire(key, RETENTION_SECONDS);
+  return next;
+}
+
+export async function adminSaveReport(
+  uid: string,
+  reportId: string,
+  patch: { text?: string; summary?: string; useGod?: string; question?: string }
+) {
+  if (!redis) throw new Error('Redis not configured');
+  const existing = await getReport(uid, reportId);
+  if (!existing) throw new Error('Report not found');
+
+  const text = patch.text !== undefined ? patch.text : existing.text;
+  const { markdown, data } = splitReport(text);
+  const meta: ReportMeta = {
+    ...existing.meta,
+    summary: patch.summary !== undefined ? patch.summary : existing.meta.summary || data?.summary || data?.verdict,
+    useGod: patch.useGod !== undefined ? patch.useGod : existing.meta.useGod || data?.useGod,
+    question: patch.question !== undefined ? patch.question : existing.meta.question,
+    adminEditedAt: Date.now(),
+  };
+
+  await redis.hset(reportsKey(uid), { [reportId]: JSON.stringify(meta) });
+  await redis.set(reportBodyKey(uid, reportId), markdown || text, { ex: RETENTION_SECONDS });
+  await redis.expire(reportsKey(uid), RETENTION_SECONDS);
+
+  if (meta.useGod) {
+    const chart = await getChart(uid, meta.chartId);
+    if (chart) {
+      await adminSaveChart(uid, {
+        ...chart,
+        useGod: meta.useGod,
+        useGodLocked: true,
+      });
+    }
+  }
+  return { meta, text: markdown || text };
+}
+
+export async function listUserAccounts(): Promise<UserAccountSummary[]> {
+  if (!redis) return [];
+  const keys = (await redis.keys('user:*:meta')) as string[];
+  const accounts: UserAccountSummary[] = [];
+  for (const key of keys) {
+    const match = /^user:([^:]+):meta$/.exec(key);
+    if (!match) continue;
+    const uid = match[1];
+    const meta = asRecord(await redis.hgetall(key));
+    const charts = asRecord(await redis.hgetall(chartsKey(uid)));
+    const reports = asRecord(await redis.hgetall(reportsKey(uid)));
+    accounts.push({
+      uid,
+      email: meta.email || uid,
+      updatedAt: Number(meta.updatedAt) || 0,
+      chartCount: Object.keys(charts).length,
+      reportCount: Object.keys(reports).length,
+    });
+  }
+  return accounts.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export async function listCharts(uid: string): Promise<ChartSnapshot[]> {
@@ -111,6 +204,38 @@ export async function listCharts(uid: string): Promise<ChartSnapshot[]> {
 export async function getChart(uid: string, chartId: string): Promise<ChartSnapshot | null> {
   if (!redis) return null;
   return parseJson<ChartSnapshot>(await redis.hget(chartsKey(uid), chartId));
+}
+
+/** Match a saved chart even if minute in the id differs slightly. */
+export async function findChartForBirth(
+  uid: string,
+  birth: {
+    year: number;
+    month: number;
+    day: number;
+    hour: number;
+    gender: string;
+    longitude: number;
+    chartId?: string;
+  }
+): Promise<ChartSnapshot | null> {
+  if (birth.chartId) {
+    const exact = await getChart(uid, birth.chartId);
+    if (exact) return exact;
+  }
+  const charts = await listCharts(uid);
+  const lon = Number(birth.longitude).toFixed(2);
+  return (
+    charts.find(
+      (c) =>
+        c.year === birth.year &&
+        c.month === birth.month &&
+        c.day === birth.day &&
+        c.hour === birth.hour &&
+        c.gender === birth.gender &&
+        Number(c.longitude).toFixed(2) === lon
+    ) || null
+  );
 }
 
 export async function saveReport(
@@ -141,7 +266,7 @@ export async function saveReport(
 
   if (useGod) {
     const chart = await getChart(uid, meta.chartId);
-    if (chart) await saveChart(uid, { ...chart, useGod });
+    if (chart && !chart.useGodLocked) await saveChart(uid, { ...chart, useGod });
   }
 
   const dropped = await pruneHash(rKey, MAX_REPORTS, (item) => Number(item.createdAt) || 0);

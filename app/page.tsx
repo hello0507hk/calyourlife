@@ -1012,6 +1012,7 @@ function AiAnalysis({
   loggedIn,
   userEmail,
   savedBundle,
+  chartId,
   onReportsSaved,
 }: {
   baziData: BaziResult;
@@ -1020,6 +1021,7 @@ function AiAnalysis({
   loggedIn: boolean;
   userEmail: string | null;
   savedBundle: SavedReportBundle | null;
+  chartId?: string | null;
   onReportsSaved?: () => void;
 }) {
   const thisYear = new Date().getFullYear();
@@ -1170,6 +1172,7 @@ function AiAnalysis({
         type,
         baziData,
         userNotes: '',
+        ...(chartId ? { chartId } : {}),
         ...(type !== 'deep' && { targetYear: year }),
         ...(type === 'yearly_qa' && { question: q }),
         ...(resume ? { resume } : {}),
@@ -1644,6 +1647,7 @@ export default function Page() {
                   loggedIn={loggedIn}
                   userEmail={userEmail}
                   savedBundle={savedBundle}
+                  chartId={activeChartId}
                   onReportsSaved={() => {
                     if (activeChartId) refreshSavedBundle(activeChartId);
                   }}
