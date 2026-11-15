@@ -92,8 +92,11 @@ function asRecord(value: unknown): Record<string, string> {
   return out;
 }
 
-function parseJson<T>(raw: string | null | undefined): T | null {
-  if (!raw) return null;
+/** Upstash may auto-deserialize JSON hash values into objects. */
+function parseJson<T>(raw: unknown): T | null {
+  if (raw == null) return null;
+  if (typeof raw === 'object') return raw as T;
+  if (typeof raw !== 'string' || !raw) return null;
   try {
     return JSON.parse(raw) as T;
   } catch {

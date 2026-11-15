@@ -65,6 +65,7 @@ export default function AdminAccountsPage() {
     setChart(null);
     setReport(null);
     setNotice('');
+    setError('');
     setBusy(true);
     try {
       const res = await fetch(`/api/admin/accounts?uid=${encodeURIComponent(account.uid)}`, { cache: 'no-store' });
@@ -94,6 +95,7 @@ export default function AdminAccountsPage() {
     if (!selectedUid) return;
     setBusy(true);
     setNotice('');
+    setError('');
     try {
       const res = await fetch(
         `/api/admin/accounts?uid=${encodeURIComponent(selectedUid)}&reportId=${encodeURIComponent(meta.id)}`,
