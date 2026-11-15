@@ -191,6 +191,9 @@ export default function AdminAccountsPage() {
           <p className="mt-1 text-xs text-slate-500">查看所有命主資料夾，並可手動更改用神、備註與報告內容。</p>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/admin/reports" className="rounded-lg border border-slate-800 px-3 py-2 text-sm text-slate-300">
+            全部報告
+          </Link>
           <Link href="/admin" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-800 px-3 text-sm text-slate-300">
             <ArrowLeft className="size-4" /> 統計後台
           </Link>
@@ -290,25 +293,51 @@ export default function AdminAccountsPage() {
                     </ul>
                   </div>
                   <div>
-                    <h3 className="mb-2 text-xs font-bold text-slate-400">報告</h3>
-                    <ul className="flex max-h-64 flex-col gap-1 overflow-auto">
-                      {(chart ? reports.filter((r) => r.chartId === chart.id) : reports).map((r) => (
-                        <li key={r.id}>
-                          <button
-                            type="button"
-                            onClick={() => openReport(r)}
-                            className={`w-full rounded-lg border px-2.5 py-2 text-left text-xs ${
-                              report?.meta.id === r.id ? 'border-amber-500/50 bg-amber-500/10' : 'border-slate-800 bg-slate-950/50'
-                            }`}
-                          >
-                            {REPORT_LABEL[r.type] || r.type}
-                            {r.year ? ` · ${r.year}` : ''}
-                            {r.adminEditedAt ? ' · 已手動改' : ''}
-                          </button>
-                        </li>
-                      ))}
+                    <h3 className="mb-2 text-xs font-bold text-slate-400">
+                      全部報告紀錄
+                      {chart ? <span className="font-normal text-slate-600">（可點命盤篩選）</span> : null}
+                    </h3>
+                    <ul className="flex max-h-80 flex-col gap-1 overflow-auto">
+                      {(chart ? reports.filter((r) => r.chartId === chart.id) : reports).map((r) => {
+                        const chartLabel = charts.find((c) => c.id === r.chartId);
+                        return (
+                          <li key={r.id}>
+                            <button
+                              type="button"
+                              onClick={() => openReport(r)}
+                              className={`w-full rounded-lg border px-2.5 py-2 text-left text-xs ${
+                                report?.meta.id === r.id ? 'border-amber-500/50 bg-amber-500/10' : 'border-slate-800 bg-slate-950/50'
+                              }`}
+                            >
+                              <div className="text-slate-200">
+                                {REPORT_LABEL[r.type] || r.type}
+                                {r.year ? ` · ${r.year}` : ''}
+                                {r.useGod ? ` · 用神 ${r.useGod}` : ''}
+                                {r.adminEditedAt ? ' · 已手動改' : ''}
+                              </div>
+                              <div className="mt-0.5 text-[11px] text-slate-500">
+                                {new Date(r.createdAt).toLocaleString('zh-HK')}
+                                {chartLabel ? ` · ${chartLabel.year}/${chartLabel.month}/${chartLabel.day}` : ''}
+                              </div>
+                              {r.question && <div className="mt-0.5 truncate text-[11px] text-slate-400">問：{r.question}</div>}
+                            </button>
+                          </li>
+                        );
+                      })}
                       {!reports.length && <li className="text-xs text-slate-500">無報告</li>}
                     </ul>
+                    {chart && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setChart(null);
+                          setReport(null);
+                        }}
+                        className="mt-2 text-[11px] text-amber-300 underline-offset-2 hover:underline"
+                      >
+                        顯示此帳號全部報告
+                      </button>
+                    )}
                   </div>
                 </div>
               </section>

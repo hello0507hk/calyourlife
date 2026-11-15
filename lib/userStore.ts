@@ -5,8 +5,25 @@ import { splitReport } from '@/lib/reportFormat';
 export { chartIdFromBirth };
 
 const MAX_CHARTS = 40;
-const MAX_REPORTS = 80;
-const RETENTION_SECONDS = 60 * 60 * 24 * 800;
+/** Keep a long history of every reading for admin review; do not aggressively prune. */
+const MAX_REPORTS = 2000;
+const RETENTION_SECONDS = 60 * 60 * 24 * 3650; // ~10 years
+const ADMIN_REPORT_INDEX = 'admin:report-index';
+
+export type AdminReportIndexEntry = {
+  uid: string;
+  email: string;
+  reportId: string;
+  chartId: string;
+  type: ReportMeta['type'];
+  year?: number;
+  question?: string;
+  createdAt: number;
+  useGod?: string;
+  summary?: string;
+  pillarsText?: string;
+  birthLabel?: string;
+};
 
 export type ChartSnapshot = {
   id: string;
@@ -157,16 +174,17 @@ export async function adminSaveReport(
   await redis.set(reportBodyKey(uid, reportId), markdown || text, { ex: RETENTION_SECONDS });
   await redis.expire(reportsKey(uid), RETENTION_SECONDS);
 
+  let chart = await getChart(uid, meta.chartId);
   if (meta.useGod) {
-    const chart = await getChart(uid, meta.chartId);
     if (chart) {
-      await adminSaveChart(uid, {
+      chart = await adminSaveChart(uid, {
         ...chart,
         useGod: meta.useGod,
         useGodLocked: true,
       });
     }
   }
+  await indexReportForAdmin(uid, meta, chart);
   return { meta, text: markdown || text };
 }
 
@@ -264,16 +282,116 @@ export async function saveReport(
   await redis.set(bodyKey, markdown || meta.text, { ex: RETENTION_SECONDS });
   await redis.expire(rKey, RETENTION_SECONDS);
 
-  if (useGod) {
-    const chart = await getChart(uid, meta.chartId);
-    if (chart && !chart.useGodLocked) await saveChart(uid, { ...chart, useGod });
-  }
+  const chart = await getChart(uid, meta.chartId);
+  if (useGod && chart && !chart.useGodLocked) await saveChart(uid, { ...chart, useGod });
+
+  await indexReportForAdmin(uid, record, chart);
 
   const dropped = await pruneHash(rKey, MAX_REPORTS, (item) => Number(item.createdAt) || 0);
   if (dropped?.length && redis) {
-    for (const d of dropped) await redis.del(reportBodyKey(uid, d.id));
+    for (const d of dropped) {
+      await redis.del(reportBodyKey(uid, d.id));
+      await redis.zrem(ADMIN_REPORT_INDEX, `${uid}:${d.id}`);
+    }
   }
   return record;
+}
+
+async function indexReportForAdmin(uid: string, record: ReportMeta, chart: ChartSnapshot | null) {
+  if (!redis) return;
+  const meta = asRecord(await redis.hgetall(`user:${uid}:meta`));
+  const entry: AdminReportIndexEntry = {
+    uid,
+    email: meta.email || uid,
+    reportId: record.id,
+    chartId: record.chartId,
+    type: record.type,
+    year: record.year,
+    question: record.question,
+    createdAt: record.createdAt,
+    useGod: record.useGod || chart?.useGod,
+    summary: record.summary,
+    pillarsText: chart?.pillarsText,
+    birthLabel: chart
+      ? `${chart.year}/${chart.month}/${chart.day} ${String(chart.hour).padStart(2, '0')}:${String(chart.minute ?? 0).padStart(2, '0')}`
+      : undefined,
+  };
+  const member = `${uid}:${record.id}`;
+  await redis.zadd(ADMIN_REPORT_INDEX, { score: record.createdAt, member });
+  await redis.set(`admin:report-entry:${member}`, JSON.stringify(entry), { ex: RETENTION_SECONDS });
+}
+
+export async function listAdminReports(limit = 100): Promise<AdminReportIndexEntry[]> {
+  if (!redis) return [];
+  const members = (await redis.zrange(ADMIN_REPORT_INDEX, 0, Math.max(0, limit - 1), {
+    rev: true,
+  })) as string[];
+  if (!members?.length) {
+    // Backfill index from existing user folders (one-time style scan for older data).
+    return backfillAdminReportIndex(limit);
+  }
+  const out: AdminReportIndexEntry[] = [];
+  for (const member of members) {
+    const raw = (await redis.get(`admin:report-entry:${member}`)) as string | null;
+    const parsed = typeof raw === 'string' ? parseJson<AdminReportIndexEntry>(raw) : (raw as AdminReportIndexEntry | null);
+    if (parsed?.reportId) out.push(parsed);
+    else {
+      const sep = member.indexOf(':');
+      const uid = sep > 0 ? member.slice(0, sep) : '';
+      const reportId = sep > 0 ? member.slice(sep + 1) : '';
+      if (!uid || !reportId) continue;
+      const full = await getReport(uid, reportId);
+      if (!full) continue;
+      const chart = await getChart(uid, full.meta.chartId);
+      await indexReportForAdmin(uid, full.meta, chart);
+      const meta = asRecord(await redis.hgetall(`user:${uid}:meta`));
+      out.push({
+        uid,
+        email: meta.email || uid,
+        reportId: full.meta.id,
+        chartId: full.meta.chartId,
+        type: full.meta.type,
+        year: full.meta.year,
+        question: full.meta.question,
+        createdAt: full.meta.createdAt,
+        useGod: full.meta.useGod || chart?.useGod,
+        summary: full.meta.summary,
+        pillarsText: chart?.pillarsText,
+        birthLabel: chart
+          ? `${chart.year}/${chart.month}/${chart.day}`
+          : undefined,
+      });
+    }
+  }
+  return out;
+}
+
+async function backfillAdminReportIndex(limit: number): Promise<AdminReportIndexEntry[]> {
+  if (!redis) return [];
+  const accounts = await listUserAccounts();
+  const collected: AdminReportIndexEntry[] = [];
+  for (const account of accounts) {
+    const reports = await listReports(account.uid);
+    for (const report of reports) {
+      const chart = await getChart(account.uid, report.chartId);
+      await indexReportForAdmin(account.uid, report, chart);
+      collected.push({
+        uid: account.uid,
+        email: account.email,
+        reportId: report.id,
+        chartId: report.chartId,
+        type: report.type,
+        year: report.year,
+        question: report.question,
+        createdAt: report.createdAt,
+        useGod: report.useGod || chart?.useGod,
+        summary: report.summary,
+        pillarsText: chart?.pillarsText,
+        birthLabel: chart ? `${chart.year}/${chart.month}/${chart.day}` : undefined,
+      });
+    }
+  }
+  return collected.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
 }
 
 export async function listReports(uid: string, chartId?: string): Promise<ReportMeta[]> {

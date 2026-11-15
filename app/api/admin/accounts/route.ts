@@ -6,6 +6,7 @@ import {
   adminSaveReport,
   getChart,
   getReport,
+  listAdminReports,
   listCharts,
   listReports,
   listUserAccounts,
@@ -19,11 +20,19 @@ export async function GET(req: NextRequest) {
   const uid = req.nextUrl.searchParams.get('uid');
   const chartId = req.nextUrl.searchParams.get('chartId');
   const reportId = req.nextUrl.searchParams.get('reportId');
+  const allReports = req.nextUrl.searchParams.get('allReports');
 
   if (reportId && uid) {
     const report = await getReport(uid, reportId);
     if (!report) return NextResponse.json({ error: '找不到報告' }, { status: 404 });
-    return NextResponse.json(report);
+    const chart = await getChart(uid, report.meta.chartId);
+    return NextResponse.json({ ...report, chart });
+  }
+
+  if (allReports === '1') {
+    const limit = Math.min(300, Math.max(1, Number(req.nextUrl.searchParams.get('limit')) || 100));
+    const reports = await listAdminReports(limit);
+    return NextResponse.json({ reports });
   }
 
   if (chartId && uid) {

@@ -180,6 +180,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <Link href="/admin/accounts" className="rounded-lg border border-slate-800 px-3 py-2 text-sm text-slate-300 hover:text-amber-200">
             帳號資料
           </Link>
+          <Link href="/admin/reports" className="rounded-lg border border-slate-800 px-3 py-2 text-sm text-slate-300 hover:text-amber-200">
+            全部報告
+          </Link>
           <Link href="/" className="rounded-lg border border-slate-800 px-3 py-2 text-sm text-slate-300 hover:text-amber-200">
             返回網站
           </Link>
